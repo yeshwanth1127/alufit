@@ -6,12 +6,86 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_project_access, role_contracts, role_qs
 from app.db.session import get_db
-from app.models.entities import QsComparisonRun, QsLineVariance, QsRunStatus, User
+from app.models.entities import (
+    ChangeOrder,
+    ChangeOrderRequestKind,
+    ErpJobStatus,
+    ErpJobType,
+    ErpSyncJob,
+    QsComparisonRun,
+    QsLineVariance,
+    QsRunStatus,
+    Project,
+    User,
+)
 from app.schemas.qs import QsConfirmations, QsRunCreate, QsRunOut, QsVarianceOut
+from app.schemas.design import ChangeOrderOut
+from app.schemas.erp import ErpJobOut
 from app.services.audit import log_transition
 from app.services.qs_compare import run_qs_comparison
 
 router = APIRouter(prefix="/projects/{project_id}/qs", tags=["qs"])
+
+
+@router.get("/requests", response_model=list[ChangeOrderOut])
+def list_quantity_variation_requests(
+    project_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[ChangeOrder]:
+    require_project_access(user, db, project_id, role_qs())
+    return (
+        db.query(ChangeOrder)
+        .filter(
+            ChangeOrder.project_id == project_id,
+            ChangeOrder.request_kind == ChangeOrderRequestKind.quantity_variation,
+        )
+        .order_by(ChangeOrder.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/requests/{co_id}/send-to-contracts", response_model=ErpJobOut)
+def send_request_to_contracts(
+    project_id: uuid.UUID,
+    co_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> ErpSyncJob:
+    require_project_access(user, db, project_id, role_qs())
+    co = db.get(ChangeOrder, co_id)
+    if not co or co.project_id != project_id:
+        raise HTTPException(404)
+    project = db.get(Project, project_id)
+    job = ErpSyncJob(
+        project_id=project_id,
+        job_type=ErpJobType.record_variation,
+        payload={
+            "change_order_id": str(co.id),
+            "change_order_reference": co.reference,
+            "boq_version_id": str(co.boq_version_id) if co.boq_version_id else None,
+            "request_kind": co.request_kind.value if co.request_kind else None,
+        },
+        status=ErpJobStatus.queued,
+    )
+    if project is not None:
+        job.connector_key = project.erp_connector_key
+    db.add(job)
+    db.flush()
+    log_transition(
+        db,
+        project_id=project_id,
+        entity_type="erp_job",
+        entity_id=job.id,
+        from_status=None,
+        to_status=job.status.value,
+        actor_id=user.id,
+        reason="qs_send_to_contracts",
+        metadata={"change_order_id": str(co.id)},
+    )
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 @router.post("/runs", response_model=QsRunOut)

@@ -20,6 +20,7 @@ class ErpJobOut(BaseModel):
     status: ErpJobStatus
     connector_key: str | None
     idempotency_key: str | None
+    payload: dict[str, Any] | None = None
     external_ref: str | None
     error_message: str | None
     created_at: datetime

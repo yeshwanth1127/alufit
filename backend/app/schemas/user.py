@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
+    default_role: DepartmentRole
     is_active: bool
     is_superuser: bool
 

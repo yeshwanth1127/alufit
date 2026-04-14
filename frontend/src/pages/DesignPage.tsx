@@ -567,6 +567,15 @@ export function DesignPage() {
               >
                 Create change order
               </Button>
+              <Button
+                component={RouterLink}
+                to="/design/change-orders"
+                size="small"
+                variant="outlined"
+                sx={{ ml: 1, textTransform: 'none', fontFamily: serif }}
+              >
+                Design change orders
+              </Button>
             </TableCell>
           </TableRow>
         </TableBody>

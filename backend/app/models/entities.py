@@ -69,6 +69,11 @@ class ChangeOrderStatus(str, enum.Enum):
     acknowledged_by_qs = "acknowledged_by_qs"
 
 
+class ChangeOrderRequestKind(str, enum.Enum):
+    quantity_variation = "quantity_variation"
+    addition_new_item = "addition_new_item"
+
+
 class QsRunStatus(str, enum.Enum):
     draft = "draft"
     compared = "compared"
@@ -110,6 +115,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    default_role: Mapped[DepartmentRole] = mapped_column(Enum(DepartmentRole), nullable=False, default=DepartmentRole.contracts)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -165,6 +171,8 @@ class BoqVersion(Base):
     cluster_head: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     client_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source_filename: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # Storage key for the uploaded BOQ file (local or S3), for email attachment / audit
+    source_storage_key: Mapped[Optional[str]] = mapped_column(String(768), nullable=True)
     customer_approval_status: Mapped[CustomerApprovalStatus] = mapped_column(
         Enum(CustomerApprovalStatus),
         nullable=False,
@@ -273,6 +281,9 @@ class ChangeOrder(Base):
         Uuid(as_uuid=True), ForeignKey("design_packages.id"), nullable=True
     )
     reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_kind: Mapped[Optional[ChangeOrderRequestKind]] = mapped_column(
+        Enum(ChangeOrderRequestKind), nullable=True
+    )
     boq_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("boq_versions.id"), nullable=True
     )

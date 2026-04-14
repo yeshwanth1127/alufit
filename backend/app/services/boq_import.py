@@ -1,8 +1,11 @@
 import uuid
+import csv
+from zipfile import BadZipFile
 from io import BytesIO
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
 from app.models.entities import BoqLineItem, BoqVersion, BoqVersionStatus
@@ -13,9 +16,33 @@ def import_boq_from_xlsx(db: Session, boq_version: BoqVersion, file_bytes: bytes
         raise ValueError("BOQ version is locked")
     db.query(BoqLineItem).filter(BoqLineItem.boq_version_id == boq_version.id).delete()
     errors: list[str] = []
-    wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
-    ws = wb.active
-    rows_iter = ws.iter_rows(min_row=2, values_only=True)
+    rows_iter: Any
+    try:
+        wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(min_row=2, values_only=True)
+    except (BadZipFile, InvalidFileException, OSError):
+        # Fallback for non-xlsx files (csv/tsv/txt). Header row is still treated as first row.
+        try:
+            text = file_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError as e:
+            raise ValueError(
+                "Unsupported file format. Upload an .xlsx file or a UTF-8 CSV/TSV text file."
+            ) from e
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise ValueError("BOQ file is empty")
+        sample = "\n".join(lines[:10])
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except csv.Error:
+            class _FallbackDialect(csv.excel):
+                delimiter = ","
+
+            dialect = _FallbackDialect
+        reader = csv.reader(lines, dialect)
+        next(reader, None)  # Skip header row for parity with Excel flow.
+        rows_iter = reader
     sort_order = 0
     count = 0
     for row in rows_iter:

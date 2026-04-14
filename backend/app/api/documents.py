@@ -2,8 +2,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, require_project_access
 from app.db.session import get_db
 from app.models.entities import Attachment, DocumentStatus, ProjectDocument, User, utcnow
@@ -16,7 +18,7 @@ from app.schemas.documents import (
     RejectBody,
 )
 from app.services.audit import log_transition
-from app.services.storage import make_storage_key, upload_fileobj
+from app.services.storage import make_storage_key, presigned_get_url, resolve_local_storage_key, upload_fileobj
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
 
@@ -326,3 +328,36 @@ async def upload_attachment(
     db.commit()
     db.refresh(att)
     return att
+
+
+@router.get("/{document_id}/attachments/{attachment_id}/download")
+def download_attachment(
+    project_id: uuid.UUID,
+    document_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    d = db.get(ProjectDocument, document_id)
+    if not d or d.project_id != project_id:
+        raise HTTPException(404)
+    _doc_access(user, db, project_id, d)
+    att = db.get(Attachment, attachment_id)
+    if (
+        not att
+        or att.project_id != project_id
+        or att.entity_type != "project_document"
+        or att.entity_id != document_id
+    ):
+        raise HTTPException(404)
+
+    s = get_settings()
+    if s.storage_backend == "local":
+        path = resolve_local_storage_key(att.storage_key)
+        if not path.exists():
+            raise HTTPException(404, "Attachment file missing in storage")
+        media_type = att.content_type or "application/octet-stream"
+        return FileResponse(path, media_type=media_type, filename=att.filename)
+
+    url = presigned_get_url(att.storage_key)
+    return RedirectResponse(url)

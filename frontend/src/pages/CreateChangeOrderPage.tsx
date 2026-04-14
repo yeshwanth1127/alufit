@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -95,7 +95,6 @@ function effectiveWorkOrder(doc: ProjectDocument | undefined, boq: BoqVersion | 
 export function CreateChangeOrderPage() {
   const { projectId = '' } = useParams()
   const [searchParams] = useSearchParams()
-  const nav = useNavigate()
   const qc = useQueryClient()
 
   const { data: project } = useQuery({
@@ -123,6 +122,7 @@ export function CreateChangeOrderPage() {
   })
 
   const docIdFromQuery = searchParams.get('doc') ?? ''
+  const versionIdFromQuery = searchParams.get('version') ?? ''
   const selectedDocId = useMemo(() => {
     if (docIdFromQuery && documents?.some((d) => d.id === docIdFromQuery)) return docIdFromQuery
     return documents?.[0]?.id ?? ''
@@ -133,16 +133,18 @@ export function CreateChangeOrderPage() {
     [documents, selectedDocId],
   )
 
-  const qtySubmitted = Boolean(selectedDoc?.quantity_variation_submitted_at)
-
   const approvedBoq = useMemo(() => {
     const list = boqVersions?.filter((b) => b.customer_approval_status === 'approved') ?? []
+    if (versionIdFromQuery) {
+      const found = list.find((b) => b.id === versionIdFromQuery)
+      if (found) return found
+    }
     return [...list].sort((a, b) =>
       (b.customer_approval_decided_at ?? b.created_at).localeCompare(
         a.customer_approval_decided_at ?? a.created_at,
       ),
     )[0]
-  }, [boqVersions])
+  }, [boqVersions, versionIdFromQuery])
 
   const coPreviewRef = useMemo(
     () => (project && changeOrders ? nextCoReference(project.code, changeOrders) : '—'),
@@ -177,16 +179,31 @@ export function CreateChangeOrderPage() {
     },
   })
 
-  const submitQtyToQs = useMutation({
-    mutationFn: async () => {
-      if (!selectedDocId) throw new Error('No document')
-      return api<ProjectDocument>(
-        `/projects/${projectId}/documents/${selectedDocId}/submit-quantity-variation-to-qs`,
-        { method: 'POST' },
-      )
+  const routeRequest = useMutation({
+    mutationFn: async ({
+      requestKind,
+      destination,
+    }: {
+      requestKind: 'quantity_variation' | 'addition_new_item'
+      destination: 'qs' | 'contracts'
+    }) => {
+      if (!approvedBoq) throw new Error('No approved BOQ available')
+      const created = await api<ChangeOrder>(`/projects/${projectId}/design/change-orders`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reference: coPreviewRef,
+          boq_version_id: approvedBoq.id,
+          request_kind: requestKind,
+        }),
+      })
+      const endpoint =
+        destination === 'qs'
+          ? `/projects/${projectId}/design/change-orders/${created.id}/send-to-qs`
+          : `/projects/${projectId}/design/change-orders/${created.id}/send-to-contracts`
+      return api<ChangeOrder>(endpoint, { method: 'POST' })
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['docs', projectId] })
+      void qc.invalidateQueries({ queryKey: ['change-orders', projectId] })
     },
   })
 
@@ -233,12 +250,12 @@ export function CreateChangeOrderPage() {
             textAlign: 'right',
           }}
         >
-          Design Team
+          Change Orders
         </Typography>
       </Box>
 
-      <Link component={RouterLink} to={`/design/${projectId}`} sx={{ display: 'inline-block', mb: 2, fontFamily: serif }}>
-        ← Back to Design
+      <Link component={RouterLink} to="/approved-boqs" sx={{ display: 'inline-block', mb: 2, fontFamily: serif }}>
+        ← Back to Approved BOQ's
       </Link>
 
       {!documents?.length ? (
@@ -260,21 +277,6 @@ export function CreateChangeOrderPage() {
               <Typography sx={{ fontWeight: 700 }}>{coPreviewRef}</Typography>
             </Box>
           </Box>
-
-          {qtySubmitted && (
-            <Alert severity="success" sx={{ mb: 2, maxWidth: 900, fontFamily: serif }}>
-              Submitted to QS team
-              {selectedDoc?.quantity_variation_submitted_at
-                ? ` — ${new Date(selectedDoc.quantity_variation_submitted_at).toLocaleString()}`
-                : ''}
-            </Alert>
-          )}
-
-          {submitQtyToQs.isError && (
-            <Alert severity="error" sx={{ mb: 2, maxWidth: 900 }}>
-              {(submitQtyToQs.error as Error).message}
-            </Alert>
-          )}
 
           <Table size="small" sx={{ borderCollapse: 'collapse', mb: 3, maxWidth: 900 }}>
             <TableHead>
@@ -322,23 +324,31 @@ export function CreateChangeOrderPage() {
               variant="contained"
               sx={{
                 ...actionBtnSx,
-                ...(qtySubmitted ? { bgcolor: '#c8e6c9', '&:hover': { bgcolor: '#a5d6a7' } } : {}),
               }}
-              disabled={!selectedDoc || submitQtyToQs.isPending || qtySubmitted}
-              onClick={() => submitQtyToQs.mutate()}
+              disabled={!selectedDoc || routeRequest.isPending || !approvedBoq}
+              onClick={() => routeRequest.mutate({ requestKind: 'quantity_variation', destination: 'qs' })}
             >
-              {qtySubmitted ? 'Submitted to QS team' : 'Quantity Variation'}
+              Quantity Variation
             </Button>
             <Button
               variant="contained"
               sx={actionBtnSx}
-              onClick={() => {
-                nav(`/contracts/${projectId}?coAction=addition_new_item`)
-              }}
+              disabled={!selectedDoc || routeRequest.isPending || !approvedBoq}
+              onClick={() => routeRequest.mutate({ requestKind: 'addition_new_item', destination: 'contracts' })}
             >
               Addition of New Item
             </Button>
           </Box>
+          {routeRequest.isSuccess && (
+            <Alert severity="success" sx={{ mt: 2, maxWidth: 900 }}>
+              Request sent.
+            </Alert>
+          )}
+          {routeRequest.isError && (
+            <Alert severity="error" sx={{ mt: 2, maxWidth: 900 }}>
+              {(routeRequest.error as Error).message}
+            </Alert>
+          )}
         </>
       )}
     </Box>

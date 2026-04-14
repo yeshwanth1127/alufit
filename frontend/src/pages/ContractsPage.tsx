@@ -18,9 +18,10 @@ import {
 } from '@mui/material'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { api, apiUpload, downloadActivityCsv } from '../api/client'
-import type { BoqVersion, ProjectDocument, Project, ErpJob, WorkOrder } from '../types'
+import type { BoqVersion, ChangeOrder, ProjectDocument, Project, ErpJob, WorkOrder } from '../types'
 import { CreateNewBoqForm } from './contracts/CreateNewBoqForm'
 import type { CustomerApprovalStatus } from '../types'
+import { formatIST } from '../utils/time'
 
 type ContractsStep = 'menu' | 'create' | 'workspace'
 
@@ -98,6 +99,35 @@ export function ContractsPage() {
       }>('/integrations/n8n-boq'),
     enabled: !!projectId && step === 'workspace',
   })
+  const { data: additionRequests } = useQuery({
+    queryKey: ['contracts-addition-requests', projectId],
+    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/contracts/new-item-requests`),
+    enabled: !!projectId && step === 'workspace',
+  })
+
+  const erpUpdateJobs = (erpJobs ?? []).filter(
+    (job) => job.job_type === 'update_boq' || job.job_type === 'record_variation',
+  )
+
+  const sendToErp = useMutation({
+    mutationFn: async (version: BoqVersion) =>
+      api(`/projects/${projectId}/erp-jobs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          job_type: 'update_boq',
+          payload: {
+            boq_version_id: version.id,
+            boq_label: version.label,
+            boq_file: version.source_filename,
+            row_count_snapshot: version.row_count_snapshot,
+          },
+        }),
+      }),
+    onSuccess: () => {
+      refetchErp()
+      qc.invalidateQueries({ queryKey: ['summary', projectId] })
+    },
+  })
 
   const importMut = useMutation({
     mutationFn: async ({ versionId, file }: { versionId: string; file: File }) => {
@@ -148,6 +178,15 @@ export function ContractsPage() {
           >
             Edit existing BOQ
           </Button>
+          <Button
+            variant="outlined"
+            size="large"
+            fullWidth
+            onClick={() => setStep('workspace')}
+            sx={{ py: 2, fontSize: '1.05rem' }}
+          >
+            ERP updates
+          </Button>
         </Stack>
       </Box>
     )
@@ -182,6 +221,90 @@ export function ContractsPage() {
           <Chip label={`Latest doc: ${summary.latest_document_status ?? '—'}`} />
           <Chip label={`Open ERP jobs: ${summary.open_erp_jobs}`} color="warning" variant="outlined" />
         </Stack>
+      )}
+
+      {step === 'workspace' && (
+        <Section title="ERP updates">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            BOQs sent by Contracts and variation requests sent from QS are shown here.
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Source</TableCell>
+                <TableCell>Reference</TableCell>
+                <TableCell>File</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>External ref</TableCell>
+                <TableCell>Created</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {!erpUpdateJobs.length ? (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <Typography color="text.secondary">No BOQ updates sent to ERP yet.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                erpUpdateJobs.map((job) => {
+                  const payload = job.payload as Record<string, unknown> | null | undefined
+                  const source = job.job_type === 'record_variation' ? 'QS variation request' : 'Contracts BOQ update'
+                  const reference =
+                    job.job_type === 'record_variation'
+                      ? (typeof payload?.change_order_reference === 'string' ? payload.change_order_reference : '—')
+                      : (typeof payload?.boq_label === 'string' ? payload.boq_label : '—')
+                  const boqFile = typeof payload?.boq_file === 'string' ? payload.boq_file : '—'
+                  return (
+                    <TableRow key={job.id}>
+                      <TableCell>{source}</TableCell>
+                      <TableCell>{reference}</TableCell>
+                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{boqFile}</TableCell>
+                      <TableCell>{job.status}</TableCell>
+                      <TableCell>{job.external_ref ?? '—'}</TableCell>
+                      <TableCell>{formatIST(job.created_at)}</TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+        </Section>
+      )}
+
+      {step === 'workspace' && (
+        <Section title="New Items Addition Requests">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Requests routed from Change Orders for Contracts review.
+          </Typography>
+          <Button variant="contained" sx={{ mb: 2 }}>
+            New Items Addition Requests
+          </Button>
+          {!additionRequests?.length ? (
+            <Typography color="text.secondary">No addition requests yet.</Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Reference</TableCell>
+                  <TableCell>BOQ</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Created</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {additionRequests.map((req) => (
+                  <TableRow key={req.id}>
+                    <TableCell>{req.reference}</TableCell>
+                    <TableCell>{req.boq_version_id ?? '—'}</TableCell>
+                    <TableCell>{req.status}</TableCell>
+                    <TableCell>{formatIST(req.created_at)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
       )}
 
       {n8nBoq && (
@@ -331,6 +454,14 @@ export function ContractsPage() {
                         Approve (POC)
                       </Button>
                     )}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => sendToErp.mutate(v)}
+                      disabled={sendToErp.isPending}
+                    >
+                      Send to ERP
+                    </Button>
                     <Link component={RouterLink} to={`/contracts/${projectId}/boq/${v.id}/lines`}>
                       View lines
                     </Link>

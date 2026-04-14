@@ -3,8 +3,7 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
+  Paper,
   Stack,
   TextField,
   Typography,
@@ -43,19 +42,39 @@ export function LoginPage() {
       sx={{
         minHeight: '100vh',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'stretch',
         justifyContent: 'center',
-        px: 2,
-        background: 'linear-gradient(145deg, #e8eaf2 0%, #f5f6fa 40%, #dde3f0 100%)',
+        px: { xs: 1.5, md: 4 },
+        py: { xs: 1.5, md: 4 },
       }}
     >
-      <Card elevation={4} sx={{ maxWidth: 420, width: 1 }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom>
-            Alufit workflow
-          </Typography>
-          <Typography color="text.secondary" variant="body2" sx={{ mb: 3 }}>
-            Sign in with your department account (seed: contracts@alufit.local / demo123)
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: 980,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1.1fr 1fr' },
+          gap: 2,
+        }}
+      >
+        <Paper sx={{ p: { xs: 3, md: 4 }, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h4" sx={{ mb: 1 }}>
+              Alufit Workflow
+            </Typography>
+            <Typography color="text.secondary" sx={{ maxWidth: 460 }}>
+              Role-based dashboard for Contracts, Design, and QS teams. Choose your project and continue from your assigned workspace.
+            </Typography>
+          </Box>
+          <Stack spacing={0.5} sx={{ mt: 4 }}>
+            <Typography variant="body2">Demo user: contracts@alufit.local / demo123</Typography>
+            <Typography variant="body2">Admin user: admin@alufit.local / admin123</Typography>
+          </Stack>
+        </Paper>
+
+        <Paper sx={{ p: { xs: 3, md: 4 } }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Sign in
           </Typography>
           <form onSubmit={submit}>
             <Stack spacing={2}>
@@ -79,13 +98,10 @@ export function LoginPage() {
               <Button type="submit" variant="contained" size="large" disabled={loading}>
                 {loading ? 'Signing in…' : 'Sign in'}
               </Button>
-              <Typography variant="caption" color="text.secondary">
-                Admin: admin@alufit.local / admin123
-              </Typography>
             </Stack>
           </form>
-        </CardContent>
-      </Card>
+        </Paper>
+      </Box>
     </Box>
   )
 }

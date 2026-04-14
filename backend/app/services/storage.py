@@ -35,6 +35,11 @@ def _safe_local_file(key: str) -> Path:
     return out
 
 
+def resolve_local_storage_key(key: str) -> Path:
+    """Resolve a storage key to a safe absolute local path."""
+    return _safe_local_file(key)
+
+
 def ensure_bucket() -> None:
     s = get_settings()
     if s.storage_backend == "local":
@@ -81,3 +86,14 @@ def presigned_get_url(key: str, expires: int = 3600) -> str:
 def make_storage_key(project_id: uuid.UUID, filename: str) -> str:
     safe = filename.replace("/", "_")[:200]
     return f"projects/{project_id}/{uuid.uuid4().hex}_{safe}"
+
+
+def read_storage_bytes(key: str) -> bytes:
+    """Read object bytes for a storage key (local disk or S3)."""
+    s = get_settings()
+    if s.storage_backend == "local":
+        path = resolve_local_storage_key(key)
+        return path.read_bytes()
+    ensure_bucket()
+    obj = _client().get_object(Bucket=s.s3_bucket, Key=key)
+    return obj["Body"].read()

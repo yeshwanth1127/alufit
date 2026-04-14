@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.entities import BoqVersion, CustomerApprovalStatus
 from app.schemas.webhook import N8nCustomerBoqApprovalBody
 from app.services.audit import log_transition
+from app.services.design_handoff import ensure_design_handoff_document
 from app.core.config import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -60,6 +61,8 @@ def process_n8n_customer_boq_approval(
         reason="n8n_customer_approval_webhook",
         metadata={"note": body.note},
     )
+    if new_status == CustomerApprovalStatus.approved:
+        ensure_design_handoff_document(db, v, actor_id=None)
     db.commit()
     return {
         "ok": True,

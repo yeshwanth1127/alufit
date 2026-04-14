@@ -1,15 +1,24 @@
+import mimetypes
 import uuid
+from io import BytesIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_project_access, require_superuser, role_contracts
+from app.core.deps import (
+    get_current_user,
+    require_project_access,
+    require_superuser,
+    role_contracts,
+)
 from app.db.session import get_db
 from app.models.entities import (
     BoqSource,
     BoqVersion,
+    ChangeOrder,
+    ChangeOrderRequestKind,
     CustomerApprovalStatus,
     DepartmentRole,
     ErpJobStatus,
@@ -22,6 +31,7 @@ from app.models.entities import (
     utcnow,
 )
 from app.schemas.project import (
+    ApprovedBoqProjectGroup,
     BoqVersionCreate,
     BoqVersionOut,
     MembershipAssign,
@@ -29,10 +39,12 @@ from app.schemas.project import (
     ProjectOut,
     ProjectSummary,
 )
+from app.schemas.design import ChangeOrderOut
 from app.services.audit import log_transition
 from app.services.boq_import import import_boq_from_xlsx
 from app.services.boq_submit_email import send_boq_submitted_for_approval_email
 from app.services.n8n_notify import notify_n8n_boq_submitted
+from app.services.storage import make_storage_key, upload_fileobj
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -78,6 +90,42 @@ def list_projects(
     if not mids:
         return []
     return db.query(Project).filter(Project.id.in_(mids)).order_by(Project.name).all()
+
+
+@router.get("/approved-boqs", response_model=list[ApprovedBoqProjectGroup])
+def list_approved_boqs_grouped(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[ApprovedBoqProjectGroup]:
+    """Design dashboard feed: approved BOQs grouped by project with full version history context."""
+    if user.is_superuser:
+        projects = db.query(Project).order_by(Project.name).all()
+    else:
+        mids = [m.project_id for m in user.memberships]
+        if not mids:
+            return []
+        projects = db.query(Project).filter(Project.id.in_(mids)).order_by(Project.name).all()
+
+    out: list[ApprovedBoqProjectGroup] = []
+    for p in projects:
+        versions = (
+            db.query(BoqVersion)
+            .filter(
+                BoqVersion.project_id == p.id,
+                BoqVersion.customer_approval_status == CustomerApprovalStatus.approved,
+            )
+            .order_by(BoqVersion.customer_approval_decided_at.desc(), BoqVersion.created_at.desc())
+            .all()
+        )
+        if not versions:
+            continue
+        out.append(
+            ApprovedBoqProjectGroup(
+                project=ProjectOut.model_validate(p),
+                versions=[BoqVersionOut.model_validate(v) for v in versions],
+            )
+        )
+    return out
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -167,6 +215,24 @@ def list_boq_versions(
         db.query(BoqVersion)
         .filter(BoqVersion.project_id == project_id)
         .order_by(BoqVersion.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/{project_id}/contracts/new-item-requests", response_model=list[ChangeOrderOut])
+def list_addition_new_item_requests(
+    project_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[ChangeOrder]:
+    require_project_access(user, db, project_id, role_contracts())
+    return (
+        db.query(ChangeOrder)
+        .filter(
+            ChangeOrder.project_id == project_id,
+            ChangeOrder.request_kind == ChangeOrderRequestKind.addition_new_item,
+        )
+        .order_by(ChangeOrder.created_at.desc())
         .all()
     )
 
@@ -270,6 +336,11 @@ async def create_boq_with_upload(
     except ValueError as e:
         db.rollback()
         raise HTTPException(400, str(e)) from e
+    fname = (v.source_filename or "boq.xlsx").strip() or "boq.xlsx"
+    boq_key = make_storage_key(project_id, fname)
+    ct = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+    upload_fileobj(BytesIO(data), boq_key, ct)
+    v.source_storage_key = boq_key
     _mark_pending_customer_approval(v)
     log_transition(
         db,

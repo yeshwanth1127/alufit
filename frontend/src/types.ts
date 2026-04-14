@@ -5,6 +5,8 @@ export type Project = {
   erp_connector_key: string | null
 }
 
+export type DepartmentRole = 'contracts' | 'design' | 'qs' | 'admin'
+
 export type CustomerApprovalStatus =
   | 'not_sent'
   | 'pending'
@@ -31,8 +33,20 @@ export type BoqVersion = {
   locked_at: string | null
 }
 
+export type BoqLineOut = {
+  id: string
+  line_no: string
+  description: string
+  uom: string | null
+  quantity: number
+  rate: number
+  amount: number
+  sort_order: number
+}
+
 export type ProjectDocument = {
   id: string
+  project_id?: string
   document_number: string
   title: string
   /** Design sheet work order line; falls back to approved BOQ when unset */
@@ -50,6 +64,7 @@ export type DocumentAttachment = {
   entity_id: string
   size_bytes: number
   created_at: string
+  download_url?: string
   /** calculation | shop_drawing — older uploads may be null */
   attachment_slot?: string | null
 }
@@ -64,9 +79,13 @@ export type DesignPackage = {
 
 export type ChangeOrder = {
   id: string
+  project_id?: string
   reference: string
+  request_kind?: 'quantity_variation' | 'addition_new_item' | null
   status: string
   design_package_id: string | null
+  boq_version_id?: string | null
+  created_at?: string
 }
 
 export type QsRun = {
@@ -100,12 +119,24 @@ export type ErpJob = {
   id: string
   job_type: string
   status: string
+  payload?: Record<string, unknown> | null
   external_ref: string | null
   error_message: string | null
   created_at: string
 }
 
 export type Me = {
-  user: { id: string; email: string; full_name: string; is_superuser: boolean }
-  memberships: { project_id: string; project_name: string; project_code: string; role: string }[]
+  user: {
+    id: string
+    email: string
+    full_name: string
+    is_superuser: boolean
+    default_role?: DepartmentRole
+  }
+  memberships: { project_id: string; project_name: string; project_code: string; role: DepartmentRole }[]
+}
+
+export type ApprovedBoqProjectGroup = {
+  project: Project
+  versions: BoqVersion[]
 }

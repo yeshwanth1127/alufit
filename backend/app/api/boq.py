@@ -1,4 +1,6 @@
+import mimetypes
 import uuid
+from io import BytesIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -7,9 +9,10 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_project_access, role_contracts, role_contracts_qs_read
 from app.db.session import get_db
 from app.models.entities import BoqLineItem, BoqVersion, BoqVersionStatus, CustomerApprovalStatus, User, utcnow
-from app.schemas.project import BoqLineOut, BoqLinePage, BoqVersionOut
+from app.schemas.project import BoqLineOut, BoqLinePage, BoqLineUpdatePage, BoqVersionOut
 from app.services.audit import log_transition
 from app.services.boq_import import import_boq_from_xlsx, lock_boq_version
+from app.services.design_handoff import ensure_design_handoff_document
 
 router = APIRouter(prefix="/boq-versions", tags=["boq"])
 
@@ -43,6 +46,11 @@ async def import_xlsx(
         count, errors = import_boq_from_xlsx(db, v, data)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    fname = (file.filename or v.source_filename or "boq.xlsx").strip() or "boq.xlsx"
+    boq_key = make_storage_key(v.project_id, fname)
+    ct = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+    upload_fileobj(BytesIO(data), boq_key, ct)
+    v.source_storage_key = boq_key
     log_transition(
         db,
         project_id=v.project_id,
@@ -81,6 +89,43 @@ def list_lines(
     return BoqLinePage(
         items=[BoqLineOut.model_validate(x) for x in items],
         next_cursor=next_cursor,
+        total_count=total,
+    )
+
+
+@router.put("/{version_id}/lines", response_model=BoqLinePage)
+def update_lines(
+    version_id: uuid.UUID,
+    body: BoqLineUpdatePage,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> BoqLinePage:
+    v = db.get(BoqVersion, version_id)
+    if not v:
+        raise HTTPException(404)
+    require_project_access(user, db, v.project_id, role_contracts())
+    updated_items: list[BoqLineItem] = []
+    for row in body.items:
+        item = db.get(BoqLineItem, row.id)
+        if not item or item.boq_version_id != version_id:
+            raise HTTPException(404, detail=f"BOQ line not found: {row.id}")
+        item.line_no = row.line_no.strip()
+        item.description = row.description.strip()
+        item.uom = row.uom.strip() if row.uom and row.uom.strip() else None
+        item.quantity = row.quantity
+        item.rate = row.rate
+        item.amount = row.amount
+        item.sort_order = row.sort_order
+        updated_items.append(item)
+    db.commit()
+    total = (
+        db.query(BoqLineItem)
+        .filter(BoqLineItem.boq_version_id == version_id)
+        .count()
+    )
+    return BoqLinePage(
+        items=[BoqLineOut.model_validate(item) for item in updated_items],
+        next_cursor=None,
         total_count=total,
     )
 
@@ -138,6 +183,7 @@ def poc_approve_client(
         reason="poc_contracts_dashboard_client_approve",
         metadata={},
     )
+    ensure_design_handoff_document(db, v, actor_id=user.id)
     db.commit()
     db.refresh(v)
     return v

@@ -12,8 +12,9 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.config import get_settings
 from app.db.session import get_db
-from app.models.entities import Organization, ProjectMembership, User
+from app.models.entities import DepartmentRole, Organization, ProjectMembership, User
 from app.schemas.auth_body import LoginBody, RefreshBody
 from app.schemas.user import MeOut, MembershipOut, Token, UserCreate, UserOut
 
@@ -24,10 +25,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def register(body: UserCreate, db: Annotated[Session, Depends(get_db)]) -> User:
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
+    
+    settings = get_settings()
+    # Determine role based on email domain
+    role_name = settings.get_role_for_email(body.email)
+    default_role = DepartmentRole(role_name) if role_name else DepartmentRole.contracts
+    
     user = User(
         email=body.email,
         hashed_password=hash_password(body.password),
         full_name=body.full_name,
+        default_role=default_role,
     )
     db.add(user)
     db.flush()

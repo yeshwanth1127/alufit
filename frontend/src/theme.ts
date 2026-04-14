@@ -3,15 +3,42 @@ import { createTheme } from '@mui/material/styles'
 export const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#3d4f7c' },
-    secondary: { main: '#c67b4e' },
-    success: { main: '#2e7d4a' },
-    error: { main: '#b00020' },
-    background: { default: '#f5f6fa', paper: '#ffffff' },
+    primary: { main: '#111827' },
+    secondary: { main: '#6b7280' },
+    success: { main: '#047857' },
+    error: { main: '#b91c1c' },
+    background: { default: '#f3f4f6', paper: '#ffffff' },
   },
   typography: {
-    fontFamily: '"DM Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    h5: { fontWeight: 600 },
+    fontFamily: '"Manrope", "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    h4: { fontWeight: 700, letterSpacing: -0.2 },
+    h5: { fontWeight: 700, letterSpacing: -0.2 },
   },
-  shape: { borderRadius: 8 },
+  shape: { borderRadius: 10 },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 700,
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          border: '1px solid #e5e7eb',
+          boxShadow: 'none',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          borderColor: '#e5e7eb',
+        },
+      },
+    },
+  },
 })

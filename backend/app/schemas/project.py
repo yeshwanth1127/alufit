@@ -72,7 +72,27 @@ class BoqLineOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BoqLineUpdate(BaseModel):
+    id: uuid.UUID
+    line_no: str
+    description: str
+    uom: str | None = None
+    quantity: float
+    rate: float
+    amount: float
+    sort_order: int
+
+
+class BoqLineUpdatePage(BaseModel):
+    items: list[BoqLineUpdate]
+
+
 class BoqLinePage(BaseModel):
     items: list[BoqLineOut]
     next_cursor: str | None
     total_count: int
+
+
+class ApprovedBoqProjectGroup(BaseModel):
+    project: ProjectOut
+    versions: list[BoqVersionOut]

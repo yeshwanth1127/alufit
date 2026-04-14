@@ -100,5 +100,9 @@ def role_qs() -> set[DepartmentRole]:
     return {DepartmentRole.qs, DepartmentRole.admin}
 
 
+def role_design() -> set[DepartmentRole]:
+    return {DepartmentRole.design, DepartmentRole.admin}
+
+
 def role_contracts_qs_read() -> set[DepartmentRole]:
     return {DepartmentRole.contracts, DepartmentRole.qs, DepartmentRole.admin}
