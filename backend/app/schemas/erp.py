@@ -46,6 +46,7 @@ class WorkOrderCreate(BaseModel):
 class WorkOrderOut(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
+    work_order_no: int | None = None
     reference: str
     mail_received: bool
     work_order_received: bool

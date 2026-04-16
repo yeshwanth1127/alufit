@@ -29,7 +29,7 @@ export function LoginPage() {
         skipAuth: true,
       })
       setTokens(t.access_token, t.refresh_token)
-      nav('/')
+      nav('/projects')
     } catch {
       setErr('Invalid email or password')
     } finally {

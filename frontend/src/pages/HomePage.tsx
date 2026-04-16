@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Box,
@@ -8,12 +8,15 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Me, Project } from '../types'
+import { DirectChangeRequestDialog } from './common/DirectChangeRequestDialog'
 
 export function HomePage() {
   const nav = useNavigate()
+  const [sp, setSp] = useSearchParams()
+  const [directOpen, setDirectOpen] = useState(false)
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => api<Me>('/auth/me'),
@@ -36,6 +39,21 @@ export function HomePage() {
 
   const memberships = me?.memberships ?? []
   const membershipForSelected = memberships.find((m) => m.project_id === selectedProject?.id)
+
+  useEffect(() => {
+    const raise = sp.get('raise')
+    if (raise === '1') {
+      setDirectOpen(true)
+    }
+  }, [sp])
+
+  function closeDirect() {
+    setDirectOpen(false)
+    if (sp.get('raise') === '1') {
+      sp.delete('raise')
+      setSp(sp, { replace: true })
+    }
+  }
 
   function routeForRole(projectId: string, role: string): string {
     if (role === 'design') return `/design/${projectId}`
@@ -149,6 +167,8 @@ export function HomePage() {
           )}
         </Paper>
       </Box>
+
+      <DirectChangeRequestDialog open={directOpen} onClose={closeDirect} project={selectedProject} />
     </Box>
   )
 }

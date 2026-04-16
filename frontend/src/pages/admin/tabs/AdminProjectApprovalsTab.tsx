@@ -12,7 +12,7 @@ import {
 } from '@mui/material'
 import { useParams } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { BoqVersion } from '../../../types'
+import type { BoqVersion, ChangeOrder } from '../../../types'
 import { formatIST } from '../../../utils/time'
 
 type Slice = { label: string; value: number; color: string }
@@ -23,6 +23,12 @@ export function AdminProjectApprovalsTab() {
     queryKey: ['boq', projectId],
     queryFn: () => api<BoqVersion[]>(`/projects/${projectId}/boq-versions`),
     enabled: !!projectId,
+  })
+  const { data: changeOrders, isLoading: changeOrdersLoading } = useQuery({
+    queryKey: ['admin-cos', projectId],
+    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/change-orders`),
+    enabled: !!projectId,
+    retry: false,
   })
 
   const pending = useMemo(() => {
@@ -51,6 +57,11 @@ export function AdminProjectApprovalsTab() {
     }
   }, [boq])
 
+  const pendingChangeOrders = useMemo(() => {
+    const list = changeOrders ?? []
+    return list.filter((c) => (c.contracts_approval_status ?? '').toLowerCase() === 'pending')
+  }, [changeOrders])
+
   const slices = useMemo<Slice[]>(() => {
     return [
       { label: 'Approved', value: totals.approved, color: '#16a34a' },
@@ -67,7 +78,7 @@ export function AdminProjectApprovalsTab() {
           Approvals
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          BOQ customer approvals (main BOQ + post-approval line additions).
+          BOQ customer approvals (main BOQ + post-approval line additions) and Contracts approval for change requests.
         </Typography>
       </Paper>
 
@@ -139,6 +150,54 @@ export function AdminProjectApprovalsTab() {
                 </Stack>
               )}
             </Paper>
+          </Stack>
+        )}
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 650, mb: 0.5 }}>
+          Change order requests
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Direct change requests awaiting Contracts approval (Gmail/n8n loop).
+        </Typography>
+
+        {changeOrdersLoading ? (
+          <Typography color="text.secondary">Loading…</Typography>
+        ) : !pendingChangeOrders.length ? (
+          <Typography color="text.secondary">Nothing pending.</Typography>
+        ) : (
+          <Stack spacing={1}>
+            {pendingChangeOrders.map((co) => (
+              <Accordion
+                key={co.id}
+                disableGutters
+                elevation={0}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, '&:before': { display: 'none' } }}
+              >
+                <AccordionSummary expandIcon={<span>▾</span>} sx={{ px: 2, py: 0.75 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, width: '100%' }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 650 }} noWrap>
+                        {co.reference} · {co.request_kind ?? '—'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        work order: {(co.work_order_no ?? '—').trim() || '—'} · {co.id.slice(0, 8)}
+                      </Typography>
+                    </Box>
+                    <Chip size="small" label="contracts: pending" color="warning" variant="outlined" />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 2, pt: 0, pb: 2 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+                    <Detail label="Submitted" value={co.contracts_submitted_for_approval_at ? formatIST(co.contracts_submitted_for_approval_at) : '—'} />
+                    <Detail label="Decided" value={co.contracts_approval_decided_at ? formatIST(co.contracts_approval_decided_at) : '—'} />
+                    <Detail label="Note" value={(co.contracts_approval_note ?? '').trim() || '—'} />
+                    <Detail label="Description" value={(co.description ?? '').trim() || '—'} />
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            ))}
           </Stack>
         )}
       </Paper>

@@ -133,6 +133,8 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     erp_connector_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    client_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    cluster_head: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     organization: Mapped["Organization"] = relationship()
     memberships: Mapped[List["ProjectMembership"]] = relationship(back_populates="project")
@@ -289,6 +291,16 @@ class ChangeOrder(Base):
     status: Mapped[ChangeOrderStatus] = mapped_column(
         Enum(ChangeOrderStatus), nullable=False, default=ChangeOrderStatus.draft
     )
+    contracts_approval_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    contracts_approval_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contracts_submitted_for_approval_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    contracts_approval_decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    work_order_no: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -374,6 +386,7 @@ class WorkOrder(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
     )
+    work_order_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     reference: Mapped[str] = mapped_column(String(128), nullable=False)
     mail_received: Mapped[bool] = mapped_column(Boolean, default=False)
     work_order_received: Mapped[bool] = mapped_column(Boolean, default=False)

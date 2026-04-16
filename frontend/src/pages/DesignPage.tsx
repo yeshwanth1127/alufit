@@ -22,6 +22,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { api, apiUpload } from '../api/client'
 import { WORK_ORDER_HEADING_OPTIONS, pickWorkOrderHeading } from '../constants/workOrderHeadings'
 import type { BoqVersion, DesignPackage, DocumentAttachment, Project, ProjectDocument } from '../types'
+import { DirectChangeRequestDialog } from './common/DirectChangeRequestDialog'
 
 const serif = `'Georgia', 'Times New Roman', serif`
 
@@ -91,6 +92,7 @@ export function DesignPage() {
 
   const [selectedDocId, setSelectedDocId] = useState<string>('')
   const [selectedPkgId, setSelectedPkgId] = useState<string>('')
+  const [directOpen, setDirectOpen] = useState(false)
 
   useEffect(() => {
     if (!documents?.length) return
@@ -369,9 +371,11 @@ export function DesignPage() {
                   }}
                   disabled={patchDocument.isPending}
                   sx={fieldInCellSx}
-                  SelectProps={{
-                    MenuProps: {
-                      PaperProps: { sx: { maxWidth: 560 } },
+                  slotProps={{
+                    select: {
+                      MenuProps: {
+                        slotProps: { paper: { sx: { maxWidth: 560 } } },
+                      },
                     },
                   }}
                 >
@@ -577,6 +581,14 @@ export function DesignPage() {
                 Create change order
               </Button>
               <Button
+                size="small"
+                variant="outlined"
+                sx={{ ml: 1, textTransform: 'none', fontFamily: serif }}
+                onClick={() => setDirectOpen(true)}
+              >
+                Direct change request
+              </Button>
+              <Button
                 component={RouterLink}
                 to="/design/change-orders"
                 size="small"
@@ -600,6 +612,8 @@ export function DesignPage() {
           BOQ reference fills after a BOQ is client-approved on Contracts. You can still edit work order heading on the document above.
         </Typography>
       )}
+
+      <DirectChangeRequestDialog open={directOpen} onClose={() => setDirectOpen(false)} project={project} />
 
       <Typography variant="h6" sx={{ fontFamily: serif }}>
         Design packages

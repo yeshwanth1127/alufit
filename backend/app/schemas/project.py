@@ -10,6 +10,8 @@ class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     code: str = Field(min_length=1, max_length=64)
     erp_connector_key: str | None = None
+    client_name: str | None = Field(default=None, max_length=255)
+    cluster_head: str | None = Field(default=None, max_length=255)
 
 
 class ProjectOut(BaseModel):
@@ -17,6 +19,8 @@ class ProjectOut(BaseModel):
     name: str
     code: str
     erp_connector_key: str | None
+    client_name: str | None = None
+    cluster_head: str | None = None
 
     model_config = {"from_attributes": True}
 

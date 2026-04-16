@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -7,6 +7,7 @@ import {
   Chip,
   Divider,
   Link,
+  Paper,
   Stack,
   Table,
   TableBody,
@@ -23,7 +24,7 @@ import { CreateNewBoqForm } from './contracts/CreateNewBoqForm'
 import type { CustomerApprovalStatus } from '../types'
 import { formatIST } from '../utils/time'
 
-type ContractsStep = 'menu' | 'create' | 'workspace'
+type ContractsStep = 'create' | 'workspace'
 
 function customerApprovalChip(status: CustomerApprovalStatus) {
   const cfg: Record<
@@ -50,7 +51,28 @@ function customerApprovalChip(status: CustomerApprovalStatus) {
 export function ContractsPage() {
   const { projectId = '' } = useParams()
   const qc = useQueryClient()
-  const [step, setStep] = useState<ContractsStep>('menu')
+  const [step, setStep] = useState<ContractsStep>('workspace')
+
+  const sections = useMemo(
+    () => ({
+      erpUpdates: 'contracts-erp-updates',
+      additionRequests: 'contracts-addition-requests',
+      boqVersions: 'contracts-boq-versions',
+      documents: 'contracts-documents',
+      erpJobs: 'contracts-erp-jobs',
+      workOrders: 'contracts-work-orders',
+      audit: 'contracts-audit',
+    }),
+    [],
+  )
+
+  const rightPaneRef = useRef<HTMLDivElement | null>(null)
+  function scrollToSection(id: string) {
+    const root = rightPaneRef.current
+    if (!root) return
+    const el = root.querySelector<HTMLElement>(`#${id}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -141,174 +163,195 @@ export function ContractsPage() {
     },
   })
 
-  if (step === 'menu') {
-    return (
-      <Box sx={{ p: 3, maxWidth: 560, mx: 'auto' }}>
-        <Typography variant="h5" sx={{ mb: 1, fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 600 }}>
-          Contracts — {project?.name ?? '…'}
-        </Typography>
-        <Typography
-          variant="h4"
-          sx={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
-            fontWeight: 700,
-            textAlign: 'right',
-            mb: 4,
-            letterSpacing: 0.5,
-          }}
-        >
-          CONTRACTS TEAM
-        </Typography>
-        <Stack spacing={2}>
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
-            onClick={() => setStep('create')}
-            sx={{ py: 2, fontSize: '1.05rem' }}
-          >
-            Create new BOQ
-          </Button>
-          <Button
-            variant="outlined"
-            size="large"
-            fullWidth
-            onClick={() => setStep('workspace')}
-            sx={{ py: 2, fontSize: '1.05rem' }}
-          >
-            Edit existing BOQ
-          </Button>
-          <Button
-            variant="outlined"
-            size="large"
-            fullWidth
-            onClick={() => setStep('workspace')}
-            sx={{ py: 2, fontSize: '1.05rem' }}
-          >
-            ERP updates
-          </Button>
-        </Stack>
-      </Box>
-    )
-  }
-
   if (step === 'create') {
-    return (
-      <CreateNewBoqForm
-        projectId={projectId}
-        projectName={project?.name ?? ''}
-        onBack={() => setStep('menu')}
-        onSuccess={() => {
-          setStep('workspace')
-          qc.invalidateQueries({ queryKey: ['boq', projectId] })
-          qc.invalidateQueries({ queryKey: ['summary', projectId] })
-        }}
-      />
-    )
+    // Keep the sidebar visible while creating a new BOQ.
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-      <Button size="small" onClick={() => setStep('menu')} sx={{ mb: 2 }}>
-        ← BOQ menu
-      </Button>
-      <Typography variant="h4" gutterBottom>
-        Contracts — {project?.name}
-      </Typography>
-      {summary && (
-        <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-          <Chip label={`BOQ versions: ${summary.boq_versions_count}`} />
-          <Chip label={`Latest doc: ${summary.latest_document_status ?? '—'}`} />
-          <Chip label={`Open ERP jobs: ${summary.open_erp_jobs}`} color="warning" variant="outlined" />
-        </Stack>
-      )}
-
-      {step === 'workspace' && (
-        <Section title="ERP updates">
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            BOQs sent by Contracts and variation requests sent from QS are shown here.
+    <Box sx={{ maxWidth: 1360, mx: 'auto', p: { xs: 1.5, md: 2.5 } }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
+          gap: 2,
+          alignItems: 'start',
+        }}
+      >
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            position: { md: 'sticky' },
+            top: { md: 16 },
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.25 }}>
+            Contracts
           </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Source</TableCell>
-                <TableCell>Reference</TableCell>
-                <TableCell>File</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>External ref</TableCell>
-                <TableCell>Created</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {!erpUpdateJobs.length ? (
-                <TableRow>
-                  <TableCell colSpan={6}>
-                    <Typography color="text.secondary">No BOQ updates sent to ERP yet.</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                erpUpdateJobs.map((job) => {
-                  const payload = job.payload as Record<string, unknown> | null | undefined
-                  const source = job.job_type === 'record_variation' ? 'QS variation request' : 'Contracts BOQ update'
-                  const reference =
-                    job.job_type === 'record_variation'
-                      ? (typeof payload?.change_order_reference === 'string' ? payload.change_order_reference : '—')
-                      : (typeof payload?.boq_label === 'string' ? payload.boq_label : '—')
-                  const boqFile = typeof payload?.boq_file === 'string' ? payload.boq_file : '—'
-                  return (
-                    <TableRow key={job.id}>
-                      <TableCell>{source}</TableCell>
-                      <TableCell>{reference}</TableCell>
-                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{boqFile}</TableCell>
-                      <TableCell>{job.status}</TableCell>
-                      <TableCell>{job.external_ref ?? '—'}</TableCell>
-                      <TableCell>{formatIST(job.created_at)}</TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Section>
-      )}
-
-      {step === 'workspace' && (
-        <Section title="New Items Addition Requests">
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Requests routed from Change Orders for Contracts review.
+            {project?.name ?? '…'}
           </Typography>
-          <Button variant="contained" sx={{ mb: 2 }}>
-            New Items Addition Requests
-          </Button>
-          {!additionRequests?.length ? (
-            <Typography color="text.secondary">No addition requests yet.</Typography>
+
+          <Stack spacing={1}>
+            <Button
+              variant={step === 'workspace' ? 'contained' : 'outlined'}
+              onClick={() => setStep('workspace')}
+              fullWidth
+            >
+              Dashboard
+            </Button>
+            <Button
+              variant={step === 'create' ? 'contained' : 'outlined'}
+              onClick={() => setStep('create')}
+              fullWidth
+            >
+              Create new BOQ
+            </Button>
+
+            <Divider sx={{ my: 1 }} />
+
+            <Typography variant="caption" color="text.secondary">
+              Jump to
+            </Typography>
+            <Button variant="text" onClick={() => scrollToSection(sections.erpUpdates)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              ERP updates
+            </Button>
+            <Button
+              variant="text"
+              onClick={() => scrollToSection(sections.additionRequests)}
+              fullWidth
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Addition requests
+            </Button>
+            <Button variant="text" onClick={() => scrollToSection(sections.boqVersions)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              BOQ versions
+            </Button>
+            <Button variant="text" onClick={() => scrollToSection(sections.documents)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              Documents
+            </Button>
+            <Button variant="text" onClick={() => scrollToSection(sections.erpJobs)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              ERP jobs
+            </Button>
+            <Button variant="text" onClick={() => scrollToSection(sections.workOrders)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              Work orders
+            </Button>
+            <Button variant="text" onClick={() => scrollToSection(sections.audit)} fullWidth sx={{ justifyContent: 'flex-start' }}>
+              Audit
+            </Button>
+          </Stack>
+        </Paper>
+
+        <Box ref={rightPaneRef}>
+          {step === 'create' ? (
+            <CreateNewBoqForm
+              projectId={projectId}
+              projectName={project?.name ?? ''}
+              onBack={() => setStep('workspace')}
+              onSuccess={() => {
+                setStep('workspace')
+                qc.invalidateQueries({ queryKey: ['boq', projectId] })
+                qc.invalidateQueries({ queryKey: ['summary', projectId] })
+              }}
+            />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Reference</TableCell>
-                  <TableCell>BOQ</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Created</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {additionRequests.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell>{req.reference}</TableCell>
-                    <TableCell>{req.boq_version_id ?? '—'}</TableCell>
-                    <TableCell>{req.status}</TableCell>
-                    <TableCell>{formatIST(req.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Section>
-      )}
+            <>
+              <Typography variant="h4" gutterBottom sx={{ fontWeight: 750 }}>
+                Dashboard
+              </Typography>
+              {summary && (
+                <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                  <Chip label={`BOQ versions: ${summary.boq_versions_count}`} />
+                  <Chip label={`Latest doc: ${summary.latest_document_status ?? '—'}`} />
+                  <Chip label={`Open ERP jobs: ${summary.open_erp_jobs}`} color="warning" variant="outlined" />
+                </Stack>
+              )}
 
-      {n8nBoq && (
-        <Alert severity={n8nBoq.n8n_boq_callback_configured ? 'info' : 'warning'} sx={{ mb: 2 }}>
+              <Section id={sections.erpUpdates} title="ERP updates">
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  BOQs sent by Contracts and variation requests sent from QS are shown here.
+                </Typography>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Source</TableCell>
+                      <TableCell>Reference</TableCell>
+                      <TableCell>File</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>External ref</TableCell>
+                      <TableCell>Created</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {!erpUpdateJobs.length ? (
+                      <TableRow>
+                        <TableCell colSpan={6}>
+                          <Typography color="text.secondary">No BOQ updates sent to ERP yet.</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      erpUpdateJobs.map((job) => {
+                        const payload = job.payload as Record<string, unknown> | null | undefined
+                        const source =
+                          job.job_type === 'record_variation' ? 'QS variation request' : 'Contracts BOQ update'
+                        const reference =
+                          job.job_type === 'record_variation'
+                            ? (typeof payload?.change_order_reference === 'string'
+                                ? payload.change_order_reference
+                                : '—')
+                            : (typeof payload?.boq_label === 'string' ? payload.boq_label : '—')
+                        const boqFile = typeof payload?.boq_file === 'string' ? payload.boq_file : '—'
+                        return (
+                          <TableRow key={job.id}>
+                            <TableCell>{source}</TableCell>
+                            <TableCell>{reference}</TableCell>
+                            <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {boqFile}
+                            </TableCell>
+                            <TableCell>{job.status}</TableCell>
+                            <TableCell>{job.external_ref ?? '—'}</TableCell>
+                            <TableCell>{formatIST(job.created_at)}</TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </Section>
+
+              <Section id={sections.additionRequests} title="New Items Addition Requests">
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Requests routed from Change Orders for Contracts review.
+                </Typography>
+                {!additionRequests?.length ? (
+                  <Typography color="text.secondary">No addition requests yet.</Typography>
+                ) : (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Reference</TableCell>
+                        <TableCell>BOQ</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Created</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {additionRequests.map((req) => (
+                        <TableRow key={req.id}>
+                          <TableCell>{req.reference}</TableCell>
+                          <TableCell>{req.boq_version_id ?? '—'}</TableCell>
+                          <TableCell>{req.status}</TableCell>
+                          <TableCell>{formatIST(req.created_at)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Section>
+
+              {n8nBoq && (
+                <Alert severity={n8nBoq.n8n_boq_callback_configured ? 'info' : 'warning'} sx={{ mb: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
             n8n — BOQ approval callback
           </Typography>
@@ -351,9 +394,9 @@ export function ContractsPage() {
             </>
           )}
         </Alert>
-      )}
+              )}
 
-      <Section title="BOQ versions">
+              <Section id={sections.boqVersions} title="BOQ versions">
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Import additional lines on a draft version, lock when ready for QS, or{' '}
           <Link component="button" type="button" onClick={() => setStep('create')}>
@@ -476,7 +519,7 @@ export function ContractsPage() {
 
       <Divider sx={{ my: 3 }} />
 
-      <Section title="Documents">
+      <Section id={sections.documents} title="Documents">
         <DocForm projectId={projectId} onCreated={() => refetchDocs()} />
         <Table size="small">
           <TableHead>
@@ -554,7 +597,7 @@ export function ContractsPage() {
 
       <Divider sx={{ my: 3 }} />
 
-      <Section title="ERP jobs">
+      <Section id={sections.erpJobs} title="ERP jobs">
         <Button
           sx={{ mb: 1 }}
           variant="outlined"
@@ -594,7 +637,7 @@ export function ContractsPage() {
 
       <Divider sx={{ my: 3 }} />
 
-      <Section title="Contracts work orders">
+      <Section id={sections.workOrders} title="Contracts work orders">
         <WoForm projectId={projectId} onCreated={() => refetchWo()} />
         <Table size="small">
           <TableHead>
@@ -618,18 +661,22 @@ export function ContractsPage() {
 
       <Divider sx={{ my: 3 }} />
 
-      <Section title="Audit">
+      <Section id={sections.audit} title="Audit">
         <Button size="small" onClick={() => downloadActivityCsv(projectId, `activity-${projectId}.csv`)}>
           Export activity CSV
         </Button>
       </Section>
+            </>
+          )}
+        </Box>
+      </Box>
     </Box>
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box id={id} sx={{ mb: 2 }}>
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>

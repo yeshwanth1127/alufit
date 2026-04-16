@@ -1,18 +1,58 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { Project } from '../../types'
 
 export function AdminProjectsPage() {
   const nav = useNavigate()
+  const qc = useQueryClient()
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api<Project[]>('/projects'),
   })
 
   const [q, setQ] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [erpConnectorKey, setErpConnectorKey] = useState('')
+  const [clientName, setClientName] = useState('')
+  const [clusterHead, setClusterHead] = useState('')
+
+  const createProject = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        name: name.trim(),
+        code: code.trim(),
+        erp_connector_key: erpConnectorKey.trim() || null,
+        client_name: clientName.trim() || null,
+        cluster_head: clusterHead.trim() || null,
+      }
+      return api<Project>('/projects', { method: 'POST', body: JSON.stringify(payload) })
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['projects'] })
+      setCreateOpen(false)
+      setName('')
+      setCode('')
+      setErpConnectorKey('')
+      setClientName('')
+      setClusterHead('')
+    },
+  })
   const rows = useMemo(() => {
     const list = projects ?? []
     const needle = q.trim().toLowerCase()
@@ -40,9 +80,14 @@ export function AdminProjectsPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <Button variant="outlined" color="inherit" onClick={() => nav('/admin/users')}>
-            Users & roles
-          </Button>
+          <Stack direction="row" spacing={1.5} sx={{ flexShrink: 0 }}>
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              New project
+            </Button>
+            <Button variant="outlined" color="inherit" onClick={() => nav('/admin/users')}>
+              Users & roles
+            </Button>
+          </Stack>
         </Stack>
 
         {isLoading ? (
@@ -75,11 +120,67 @@ export function AdminProjectsPage() {
                 <Typography variant="caption" color="text.secondary">
                   {p.code}
                 </Typography>
+                {(p.client_name || p.cluster_head) && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                    {[p.client_name, p.cluster_head].filter(Boolean).join(' · ')}
+                  </Typography>
+                )}
               </Paper>
             ))}
           </Box>
         )}
       </Paper>
+
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>New project</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Project name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              fullWidth
+            />
+            <TextField label="Project code" value={code} onChange={(e) => setCode(e.target.value)} fullWidth />
+            <TextField
+              label="ERP connector key (optional)"
+              value={erpConnectorKey}
+              onChange={(e) => setErpConnectorKey(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Client name (optional)"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Cluster head (optional)"
+              value={clusterHead}
+              onChange={(e) => setClusterHead(e.target.value)}
+              fullWidth
+            />
+            {createProject.isError && (
+              <Typography color="error" variant="body2">
+                {(createProject.error as Error).message}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button color="inherit" onClick={() => setCreateOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => createProject.mutate()}
+            disabled={!name.trim() || !code.trim() || createProject.isPending}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

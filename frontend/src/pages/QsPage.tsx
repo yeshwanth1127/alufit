@@ -23,6 +23,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { BoqLineOut, BoqVersion, ChangeOrder, Project, QsRun, QsVariance } from '../types'
 import { formatIST } from '../utils/time'
+import { DirectChangeRequestDialog } from './common/DirectChangeRequestDialog'
 
 const serif = `'Georgia', 'Times New Roman', serif`
 
@@ -54,6 +55,7 @@ export function QsPage() {
   const [activeRun, setActiveRun] = useState('')
   const [activeRequestId, setActiveRequestId] = useState('')
   const [erpNotice, setErpNotice] = useState('')
+  const [directOpen, setDirectOpen] = useState(false)
   const { data: variances } = useQuery({
     queryKey: ['qs-var', activeRun],
     queryFn: () => api<QsVariance[]>(`/projects/${projectId}/qs/runs/${activeRun}/variances`),
@@ -100,9 +102,14 @@ export function QsPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1100, mx: 'auto' }}>
-      <Typography variant="h4" gutterBottom>
-        QS — {project?.name}
-      </Typography>
+      <Stack direction="row" sx={{ mb: 2, alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h4">QS — {project?.name}</Typography>
+        <Button variant="outlined" onClick={() => setDirectOpen(true)}>
+          Raise change order
+        </Button>
+      </Stack>
+
+      <DirectChangeRequestDialog open={directOpen} onClose={() => setDirectOpen(false)} project={project} />
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Stack direction="row" sx={{ mb: 2, justifyContent: 'space-between', alignItems: 'center' }}>

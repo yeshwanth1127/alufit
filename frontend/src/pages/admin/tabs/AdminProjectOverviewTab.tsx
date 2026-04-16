@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Accordion,
@@ -13,14 +13,22 @@ import {
 } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../../api/client'
-import type { BoqVersion, ChangeOrder, ErpJob, ProjectDocument, WorkflowTransition } from '../../../types'
+import type { BoqVersion, ChangeOrder, ErpJob, Project, ProjectDocument, WorkflowTransition } from '../../../types'
 import { formatIST } from '../../../utils/time'
+import { DirectChangeRequestDialog } from '../../common/DirectChangeRequestDialog'
 
 type Slice = { label: string; value: number; color: string }
 
 export function AdminProjectOverviewTab() {
   const nav = useNavigate()
   const { projectId = '' } = useParams()
+  const [directOpen, setDirectOpen] = useState(false)
+
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<Project>(`/projects/${projectId}`),
+    enabled: !!projectId,
+  })
 
   const { data: activity } = useQuery({
     queryKey: ['activity', projectId],
@@ -44,7 +52,7 @@ export function AdminProjectOverviewTab() {
   })
   const { data: cos } = useQuery({
     queryKey: ['admin-cos', projectId],
-    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/design/change-orders`),
+    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/change-orders`),
     enabled: !!projectId,
     retry: false,
   })
@@ -102,6 +110,9 @@ export function AdminProjectOverviewTab() {
             Inbox
           </Typography>
           <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+            <Button variant="outlined" color="inherit" onClick={() => setDirectOpen(true)}>
+              Raise change order
+            </Button>
             <Button variant="contained" onClick={() => nav(`/admin/projects/${projectId}/approvals`)}>
               Pending approvals ({pendingApprovalsCount})
             </Button>
@@ -200,6 +211,8 @@ export function AdminProjectOverviewTab() {
           </Stack>
         )}
       </Paper>
+
+      <DirectChangeRequestDialog open={directOpen} onClose={() => setDirectOpen(false)} project={project} />
     </Stack>
   )
 }

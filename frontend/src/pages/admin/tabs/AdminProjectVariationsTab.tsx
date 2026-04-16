@@ -67,7 +67,7 @@ export function AdminProjectVariationsTab() {
     enabled: !!projectId,
   })
 
-  const { data: priceByBoqVersion = {}, isLoading: priceLoading } = useQuery({
+  const { data: priceByBoqVersion = {} } = useQuery({
     queryKey: ['admin-qs-price-variation', projectId],
     queryFn: () => fetchPriceVariationByBoqVersion(projectId),
     enabled: !!projectId,

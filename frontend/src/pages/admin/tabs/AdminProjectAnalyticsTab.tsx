@@ -35,7 +35,7 @@ export function AdminProjectAnalyticsTab() {
     queryKey: ['admin-cos', projectId],
     queryFn: async () => {
       try {
-        return await api<ChangeOrder[]>(`/projects/${projectId}/design/change-orders`)
+        return await api<ChangeOrder[]>(`/projects/${projectId}/change-orders`)
       } catch {
         return []
       }

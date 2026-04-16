@@ -12,11 +12,6 @@ import {
   Paper,
   Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -297,7 +292,7 @@ export function CreateChangeOrderPage() {
                           {v}
                         </Typography>
                       )}
-                      MenuProps={{ PaperProps: { sx: { maxWidth: 720 } } }}
+                      MenuProps={{ slotProps: { paper: { sx: { maxWidth: 720 } } } }}
                     >
                       {WORK_ORDER_HEADING_OPTIONS.map((opt) => (
                         <MenuItem key={opt} value={opt} sx={{ whiteSpace: 'normal', alignItems: 'flex-start', py: 1 }}>

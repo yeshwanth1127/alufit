@@ -21,7 +21,7 @@ export function AdminProjectChangeOrdersTab() {
   const { projectId = '' } = useParams()
   const { data: cos, isLoading, isError } = useQuery({
     queryKey: ['admin-cos', projectId],
-    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/design/change-orders`),
+    queryFn: () => api<ChangeOrder[]>(`/projects/${projectId}/change-orders`),
     enabled: !!projectId,
     retry: false,
   })
@@ -52,7 +52,7 @@ export function AdminProjectChangeOrdersTab() {
           Change orders
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Design-owned change orders for this project.
+          All change orders raised across roles for this project.
         </Typography>
       </Paper>
 

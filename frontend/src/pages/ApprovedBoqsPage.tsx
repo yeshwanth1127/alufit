@@ -348,9 +348,11 @@ function VersionAccordion({
                     if (linkedDoc?.id && v) patchDocument.mutate({ work_order_heading: v })
                   }}
                   disabled={!linkedDoc?.id || patchDocument.isPending}
-                  SelectProps={{
-                    MenuProps: {
-                      PaperProps: { sx: { maxWidth: 560 } },
+                  slotProps={{
+                    select: {
+                      MenuProps: {
+                        slotProps: { paper: { sx: { maxWidth: 560 } } },
+                      },
                     },
                   }}
                 >

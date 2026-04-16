@@ -3,6 +3,8 @@ export type Project = {
   name: string
   code: string
   erp_connector_key: string | null
+  client_name?: string | null
+  cluster_head?: string | null
 }
 
 export type DepartmentRole = 'contracts' | 'design' | 'qs' | 'admin'
@@ -89,6 +91,12 @@ export type ChangeOrder = {
   status: string
   design_package_id: string | null
   boq_version_id?: string | null
+  contracts_approval_status?: 'pending' | 'approved' | 'rejected' | 'changes_requested' | string
+  contracts_approval_note?: string | null
+  contracts_submitted_for_approval_at?: string | null
+  contracts_approval_decided_at?: string | null
+  work_order_no?: string | null
+  description?: string | null
   created_at?: string
 }
 
@@ -116,6 +124,7 @@ export type QsVariance = {
 export type WorkOrder = {
   id: string
   reference: string
+  work_order_no?: number | null
   mail_received: boolean
   work_order_received: boolean
 }

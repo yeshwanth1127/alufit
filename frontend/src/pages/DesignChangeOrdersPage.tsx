@@ -108,7 +108,7 @@ export function DesignChangeOrdersPage() {
     <Box sx={{ p: { xs: 1, md: 0 } }}>
       <Stack direction="row" sx={{ mb: 2, alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h4">Design Change Orders</Typography>
-        <Button component={RouterLink} to="/" variant="outlined">
+        <Button component={RouterLink} to="/projects" variant="outlined">
           Back to dashboard
         </Button>
       </Stack>

@@ -34,12 +34,15 @@ class Settings(BaseSettings):
     n8n_boq_callback_url: str | None = None
     # n8n “Webhook” node URL to trigger when a BOQ is submitted for customer approval (optional)
     n8n_boq_submitted_webhook_url: str | None = None
+    # n8n “Webhook” node URL to trigger when a direct change request is submitted
+    n8n_change_request_webhook_url: str | None = None
     # Shared secret: n8n must send this in header X-Webhook-Secret when POSTing approval results
     customer_approval_webhook_secret: str = "dev-n8n-secret-change-in-production"
 
     # Outbound BOQ notification emails (optional; empty skips or uses fallbacks in boq_submit_email)
     boq_submit_notify_email: str | None = None
     boq_line_additions_notify_email: str | None = None
+    change_request_notify_email: str | None = None
 
     # Outbound email (SMTP_* required to send)
     smtp_host: str | None = None

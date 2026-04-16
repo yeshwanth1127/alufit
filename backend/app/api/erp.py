@@ -2,6 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_project_access, role_contracts
@@ -139,4 +140,45 @@ def list_work_orders(
     user: Annotated[User, Depends(get_current_user)],
 ) -> list[WorkOrder]:
     require_project_access(user, db, project_id, None)
-    return db.query(WorkOrder).filter(WorkOrder.project_id == project_id).all()
+    return (
+        db.query(WorkOrder)
+        .filter(WorkOrder.project_id == project_id)
+        .order_by(WorkOrder.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/projects/{project_id}/work-orders/latest", response_model=WorkOrderOut)
+def latest_work_order(
+    project_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> WorkOrder:
+    require_project_access(user, db, project_id, None)
+    latest = (
+        db.query(WorkOrder)
+        .filter(WorkOrder.project_id == project_id)
+        .order_by(WorkOrder.created_at.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(404, "No work orders yet")
+    return latest
+
+
+def next_work_order_no(db: Session, project_id: uuid.UUID) -> int:
+    n = db.query(func.max(WorkOrder.work_order_no)).filter(WorkOrder.project_id == project_id).scalar()
+    max_no = int(n or 0)
+    # Back-compat: older rows may not have work_order_no filled; attempt to parse numeric references.
+    refs = (
+        db.query(WorkOrder.reference)
+        .filter(WorkOrder.project_id == project_id)
+        .all()
+    )
+    for (ref,) in refs:
+        if not isinstance(ref, str):
+            continue
+        s = ref.strip()
+        if s.isdigit():
+            max_no = max(max_no, int(s))
+    return max_no + 1

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, auth, boq, design, documents, erp, integrations, projects, qs, users, webhooks
+from app.api import activity, auth, boq, change_orders, design, documents, erp, integrations, projects, qs, users, webhooks
 from app.core.config import resolved_n8n_boq_callback_url
 
 logger = logging.getLogger("uvicorn.error")
@@ -48,6 +48,7 @@ app.include_router(users.router)
 app.include_router(integrations.router)
 app.include_router(webhooks.router)
 app.include_router(webhooks.approval_router)
+app.include_router(change_orders.router)
 
 
 @app.get("/health")

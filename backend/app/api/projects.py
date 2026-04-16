@@ -29,6 +29,7 @@ from app.models.entities import (
     ProjectDocument,
     ProjectMembership,
     User,
+    WorkOrder,
     utcnow,
 )
 from app.schemas.project import (
@@ -47,6 +48,7 @@ from app.services.boq_import import import_boq_from_xlsx
 from app.services.boq_submit_email import send_boq_submitted_for_approval_email
 from app.services.n8n_notify import notify_n8n_boq_submitted
 from app.services.storage import make_storage_key, upload_fileobj
+from app.api.erp import next_work_order_no
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -74,6 +76,8 @@ def create_project(
         name=body.name,
         code=body.code,
         erp_connector_key=body.erp_connector_key,
+        client_name=(body.client_name or "").strip() or None,
+        cluster_head=(body.cluster_head or "").strip() or None,
     )
     db.add(p)
     db.commit()
@@ -411,6 +415,22 @@ async def create_boq_with_upload(
     )
     db.add(v)
     db.flush()
+    # Creating a new BOQ implies a new Work Order number for this project.
+    wo_no = next_work_order_no(db, project_id)
+    wo = WorkOrder(project_id=project_id, work_order_no=wo_no, reference=str(wo_no))
+    db.add(wo)
+    db.flush()
+    log_transition(
+        db,
+        project_id=project_id,
+        entity_type="work_order",
+        entity_id=wo.id,
+        from_status=None,
+        to_status="created",
+        actor_id=user.id,
+        reason="created_from_new_boq",
+        metadata={"work_order_no": wo_no, "boq_version_id": str(v.id)},
+    )
     try:
         count, errors = import_boq_from_xlsx(db, v, data)
     except ValueError as e:
