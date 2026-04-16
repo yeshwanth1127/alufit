@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import {
   Box,
   Button,
@@ -14,12 +14,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { api } from '../api/client'
-import type { Project } from '../types'
+import { api } from '../../api/client'
+import type { Project } from '../../types'
 
 type UserRow = { id: string; email: string; full_name: string }
 
-export function AdminPage() {
+export function AdminUsersPage() {
+  const nav = useNavigate()
   const { data: me, isLoading } = useQuery({
     queryKey: ['me'],
     queryFn: () => api<{ user: { is_superuser: boolean } }>('/auth/me'),
@@ -47,9 +48,15 @@ export function AdminPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 900 }}>
-      <Typography variant="h4" gutterBottom>
-        Admin
-      </Typography>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'baseline', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 650 }}>
+          Admin · Users
+        </Typography>
+        <Button variant="text" color="inherit" onClick={() => nav('/admin/projects')} sx={{ fontWeight: 600 }}>
+          ← Projects
+        </Button>
+      </Stack>
+
       <Typography variant="h6">Users</Typography>
       <Table size="small">
         <TableHead>
@@ -109,3 +116,4 @@ export function AdminPage() {
     </Box>
   )
 }
+

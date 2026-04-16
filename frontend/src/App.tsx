@@ -10,7 +10,17 @@ import { DesignPage } from './pages/DesignPage'
 import { DesignChangeOrdersPage } from './pages/DesignChangeOrdersPage'
 import { CreateChangeOrderPage } from './pages/CreateChangeOrderPage'
 import { QsPage } from './pages/QsPage'
-import { AdminPage } from './pages/AdminPage'
+import { AdminProjectsPage } from './pages/admin/AdminProjectsPage'
+import { AdminProjectLayout } from './pages/admin/AdminProjectLayout'
+import { AdminUsersPage } from './pages/admin/AdminUsersPage'
+import { AdminProjectOverviewTab } from './pages/admin/tabs/AdminProjectOverviewTab'
+import { AdminProjectAnalyticsTab } from './pages/admin/tabs/AdminProjectAnalyticsTab'
+import { AdminProjectChangeOrdersTab } from './pages/admin/tabs/AdminProjectChangeOrdersTab'
+import { AdminProjectVariationsTab } from './pages/admin/tabs/AdminProjectVariationsTab'
+import { AdminProjectApprovalsTab } from './pages/admin/tabs/AdminProjectApprovalsTab'
+import { AdminProjectNotificationsTab } from './pages/admin/tabs/AdminProjectNotificationsTab'
+import { AdminProjectLogsTab } from './pages/admin/tabs/AdminProjectLogsTab'
+import { AdminProjectStubTab } from './pages/admin/tabs/AdminProjectStubTab'
 import { BoqLinesPage } from './pages/BoqLinesPage'
 import { ApprovedBoqsPage } from './pages/ApprovedBoqsPage'
 import type { DepartmentRole, Me } from './types'
@@ -158,6 +168,21 @@ function ProtectedLayout() {
   )
 }
 
+function SuperuserRoute({ element }: { element: ReactElement }) {
+  const { token, me, loading } = useAuth()
+  if (!token) return <Navigate to="/login" replace />
+  if (loading) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Typography>Loading…</Typography>
+      </Box>
+    )
+  }
+  if (!me) return <Navigate to="/login" replace />
+  if (!me.user.is_superuser) return <Navigate to="/" replace />
+  return element
+}
+
 function ProjectRoleRoute({
   allowed,
   element,
@@ -218,7 +243,7 @@ export default function App() {
         />
         <Route
           path="/contracts/:projectId/boq/:versionId/lines"
-          element={<ProjectRoleRoute allowed={['contracts', 'qs']} element={<BoqLinesPage />} />}
+          element={<ProjectRoleRoute allowed={['contracts', 'qs', 'design']} element={<BoqLinesPage />} />}
         />
         <Route
           path="/design/:projectId"
@@ -237,7 +262,33 @@ export default function App() {
           element={<ProjectRoleRoute allowed={['design']} element={<CreateChangeOrderPage />} />}
         />
         <Route path="/qs/:projectId" element={<ProjectRoleRoute allowed={['qs']} element={<QsPage />} />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route
+          path="/admin"
+          element={<SuperuserRoute element={<Navigate to="/admin/projects" replace />} />}
+        />
+        <Route path="/admin/users" element={<SuperuserRoute element={<AdminUsersPage />} />} />
+        <Route path="/admin/projects" element={<SuperuserRoute element={<AdminProjectsPage />} />} />
+        <Route
+          path="/admin/projects/:projectId"
+          element={<SuperuserRoute element={<AdminProjectLayout />} />}
+        >
+          <Route index element={<AdminProjectOverviewTab />} />
+          <Route path="analytics" element={<AdminProjectAnalyticsTab />} />
+          <Route path="change-orders" element={<AdminProjectChangeOrdersTab />} />
+          <Route path="variations" element={<AdminProjectVariationsTab />} />
+          <Route path="approvals" element={<AdminProjectApprovalsTab />} />
+          <Route
+            path="updates"
+            element={
+              <AdminProjectStubTab
+                title="Updates"
+                description="Project update feed for this workspace — placeholder."
+              />
+            }
+          />
+          <Route path="notifications" element={<AdminProjectNotificationsTab />} />
+          <Route path="logs" element={<AdminProjectLogsTab />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

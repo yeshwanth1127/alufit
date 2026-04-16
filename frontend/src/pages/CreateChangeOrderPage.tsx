@@ -5,7 +5,13 @@ import {
   Alert,
   Box,
   Button,
+  Divider,
+  FormControl,
   Link,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -15,61 +21,15 @@ import {
   Typography,
 } from '@mui/material'
 import { api } from '../api/client'
+import { WORK_ORDER_HEADING_OPTIONS, pickWorkOrderHeading } from '../constants/workOrderHeadings'
 import type { BoqVersion, ChangeOrder, Project, ProjectDocument } from '../types'
 
-const serif = `'Georgia', 'Times New Roman', serif`
-
-const headYellow = {
-  bgcolor: '#ffeb3b',
-  border: '2px solid #000',
-  fontWeight: 700,
-  fontFamily: serif,
-  fontSize: '0.85rem',
-}
-
-const headBlue = {
-  bgcolor: '#90caf9',
-  border: '2px solid #000',
-  fontWeight: 700,
-  fontFamily: serif,
-  fontSize: '0.85rem',
-}
-
-const cell = {
-  border: '2px solid #000',
-  fontFamily: serif,
-  fontSize: '0.9rem',
-  verticalAlign: 'top',
-}
-
-const projectNameBanner = {
-  bgcolor: '#ffeb3b',
-  border: '2px solid #000',
-  fontFamily: serif,
-  fontWeight: 700,
-  px: 2,
-  py: 1,
-  display: 'inline-block',
-}
-
-const fieldInCellSx = {
-  '& .MuiOutlinedInput-root': {
-    fontFamily: serif,
-    fontSize: '0.9rem',
-    bgcolor: '#fff',
-  },
-}
-
 const actionBtnSx = {
-  bgcolor: '#90caf9',
-  border: '2px solid #000',
-  color: '#000',
-  textDecoration: 'underline',
-  fontFamily: serif,
   textTransform: 'none' as const,
-  px: 3,
-  py: 1,
-  '&:hover': { bgcolor: '#64b5f6' },
+  px: 2.5,
+  py: 1.25,
+  borderRadius: 2,
+  fontWeight: 650,
 }
 
 function nextCoReference(projectCode: string, orders: ChangeOrder[]): string {
@@ -83,13 +43,6 @@ function nextCoReference(projectCode: string, orders: ChangeOrder[]): string {
     if (m) max = Math.max(max, parseInt(m[1], 10))
   }
   return `${prefix}${String(max + 1).padStart(3, '0')}`
-}
-
-function effectiveWorkOrder(doc: ProjectDocument | undefined, boq: BoqVersion | undefined): string {
-  if (!doc) return ''
-  const s = (doc.work_order_heading || '').trim()
-  if (s) return s
-  return (boq?.form_project_name || boq?.label || '').trim()
 }
 
 export function CreateChangeOrderPage() {
@@ -154,18 +107,6 @@ export function CreateChangeOrderPage() {
   const [headingDraft, setHeadingDraft] = useState('')
   const [lineDraft, setLineDraft] = useState('')
 
-  useEffect(() => {
-    if (!selectedDoc) {
-      setHeadingDraft('')
-      setLineDraft('')
-      return
-    }
-    setLineDraft(selectedDoc.title)
-    const stored = (selectedDoc.work_order_heading || '').trim()
-    const fallback = (approvedBoq?.form_project_name || approvedBoq?.label || '').trim()
-    setHeadingDraft(stored || fallback)
-  }, [selectedDoc?.id, selectedDoc?.title, selectedDoc?.work_order_heading, approvedBoq?.form_project_name, approvedBoq?.label, approvedBoq?.id])
-
   const patchDocument = useMutation({
     mutationFn: async (body: { title?: string; work_order_heading?: string }) => {
       if (!selectedDocId) throw new Error('No document')
@@ -179,6 +120,30 @@ export function CreateChangeOrderPage() {
     },
   })
 
+  useEffect(() => {
+    if (!selectedDoc) {
+      setHeadingDraft('')
+      setLineDraft('')
+      return
+    }
+    setLineDraft(selectedDoc.title)
+    const stored = (selectedDoc.work_order_heading || '').trim()
+    const fallback = (approvedBoq?.form_project_name || approvedBoq?.label || '').trim()
+    const next = pickWorkOrderHeading(stored, fallback)
+    setHeadingDraft(next)
+    if (next !== stored) {
+      patchDocument.mutate({ work_order_heading: next })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- patchDocument.mutate is stable
+  }, [
+    selectedDoc?.id,
+    selectedDoc?.title,
+    selectedDoc?.work_order_heading,
+    approvedBoq?.form_project_name,
+    approvedBoq?.label,
+    approvedBoq?.id,
+  ])
+
   const routeRequest = useMutation({
     mutationFn: async ({
       requestKind,
@@ -188,6 +153,24 @@ export function CreateChangeOrderPage() {
       destination: 'qs' | 'contracts'
     }) => {
       if (!approvedBoq) throw new Error('No approved BOQ available')
+      // Ensure the selected document is up-to-date before routing the change order.
+      // The routing flow relies on the document's persisted work_order_heading/title.
+      if (selectedDocId && selectedDoc) {
+        const nextHeading = headingDraft.trim()
+        const nextTitle = lineDraft.trim()
+        const patch: { work_order_heading?: string; title?: string } = {}
+        const curHeading = (selectedDoc.work_order_heading || '').trim()
+        if (nextHeading && nextHeading !== curHeading) patch.work_order_heading = nextHeading
+        const curTitle = (selectedDoc.title || '').trim()
+        if (nextTitle && nextTitle !== curTitle) patch.title = nextTitle
+        if (Object.keys(patch).length) {
+          await api<ProjectDocument>(`/projects/${projectId}/documents/${selectedDocId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(patch),
+          })
+          void qc.invalidateQueries({ queryKey: ['docs', projectId] })
+        }
+      }
       const created = await api<ChangeOrder>(`/projects/${projectId}/design/change-orders`, {
         method: 'POST',
         body: JSON.stringify({
@@ -206,13 +189,6 @@ export function CreateChangeOrderPage() {
       void qc.invalidateQueries({ queryKey: ['change-orders', projectId] })
     },
   })
-
-  function flushHeading() {
-    if (!selectedDoc) return
-    const next = headingDraft.trim()
-    if (next === effectiveWorkOrder(selectedDoc, approvedBoq)) return
-    patchDocument.mutate({ work_order_heading: next })
-  }
 
   function flushLine() {
     if (!selectedDoc) return
@@ -234,123 +210,167 @@ export function CreateChangeOrderPage() {
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 960, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={projectNameBanner}>
-          <Typography component="span" sx={{ fontSize: '1.1rem' }}>
-            {project?.name ?? '—'}
-          </Typography>
-        </Box>
-        <Typography
-          variant="h4"
-          sx={{
-            fontFamily: serif,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            textAlign: 'right',
-          }}
-        >
-          Change Orders
-        </Typography>
-      </Box>
-
-      <Link component={RouterLink} to="/approved-boqs" sx={{ display: 'inline-block', mb: 2, fontFamily: serif }}>
-        ← Back to Approved BOQ's
-      </Link>
+    <Box
+      sx={{
+        minHeight: 'calc(100vh - 24px)',
+        bgcolor: 'grey.50',
+        p: { xs: 2, md: 3 },
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          maxWidth: 1100,
+          mx: 'auto',
+          p: { xs: 2, md: 3 },
+          borderRadius: 2,
+          border: '1px solid #e5e7eb',
+          bgcolor: '#fff',
+        }}
+      >
+        <Stack spacing={2.5}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Link
+                component={RouterLink}
+                to="/approved-boqs"
+                sx={{ display: 'inline-block', mb: 0.75, color: 'text.secondary', fontWeight: 600 }}
+              >
+                ← Back to Approved BOQs
+              </Link>
+              <Typography variant="h4" sx={{ fontWeight: 750, letterSpacing: -0.5 }}>
+                Change order
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Project: <strong>{project?.name ?? '—'}</strong> · Reference:{' '}
+                <strong>{routeRequest.data?.reference ?? coPreviewRef}</strong>
+              </Typography>
+            </Box>
+          </Stack>
 
       {!documents?.length ? (
-        <Typography sx={{ mb: 2 }}>Add a project document on the Design page first.</Typography>
+          <Alert severity="info">
+            Add a project document on the Design page first. Then come back here to raise a change order.
+          </Alert>
       ) : (
         <>
-          <Box sx={{ mb: 2 }}>
-            <Box sx={{ ...headYellow, display: 'inline-block', px: 1.5, py: 0.75, mb: 0 }}>DOC NO.</Box>
-            <Box
-              sx={{
-                border: '2px solid #000',
-                borderTop: 0,
-                p: 1.5,
-                fontFamily: serif,
-                bgcolor: '#fff',
-              }}
-            >
-              <Typography sx={{ fontWeight: 700 }}>{selectedDoc?.document_number ?? '—'}</Typography>
-              <Typography sx={{ fontWeight: 700 }}>{coPreviewRef}</Typography>
-            </Box>
-          </Box>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+            <Stack spacing={2}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.08em' }}>
+                    Document
+                  </Typography>
+                  <Typography sx={{ fontWeight: 750 }} noWrap>
+                    {selectedDoc?.document_number ?? '—'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {selectedDoc?.title ?? '—'}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+                  <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.08em' }}>
+                    BOQ
+                  </Typography>
+                  <Typography sx={{ fontWeight: 750 }}>{approvedBoq?.label ?? '—'}</Typography>
+                </Box>
+              </Stack>
 
-          <Table size="small" sx={{ borderCollapse: 'collapse', mb: 3, maxWidth: 900 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={headYellow}>Work Order Heading</TableCell>
-                <TableCell sx={headYellow}>Work Order Line item / Description</TableCell>
-                <TableCell sx={headBlue}>BOQ Reference if needed</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell sx={cell}>
+              <Divider />
+
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>
+                <Box sx={{ flex: 3, minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.75 }}>
+                    Work order heading
+                  </Typography>
+                  <FormControl fullWidth size="small">
+                    <Select
+                      value={headingDraft}
+                      onChange={(e) => {
+                        const v = String(e.target.value)
+                        setHeadingDraft(v)
+                        if (selectedDoc && v.trim()) patchDocument.mutate({ work_order_heading: v.trim() })
+                      }}
+                      disabled={patchDocument.isPending || !selectedDoc}
+                      renderValue={(v) => (
+                        <Typography sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {v}
+                        </Typography>
+                      )}
+                      MenuProps={{ PaperProps: { sx: { maxWidth: 720 } } }}
+                    >
+                      {WORK_ORDER_HEADING_OPTIONS.map((opt) => (
+                        <MenuItem key={opt} value={opt} sx={{ whiteSpace: 'normal', alignItems: 'flex-start', py: 1 }}>
+                          {opt}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+
+                <Box sx={{ flex: 2, minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.75 }}>
+                    Description
+                  </Typography>
                   <TextField
                     fullWidth
                     multiline
-                    minRows={3}
-                    size="small"
-                    value={headingDraft}
-                    onChange={(e) => setHeadingDraft(e.target.value)}
-                    onBlur={flushHeading}
-                    disabled={patchDocument.isPending || !selectedDoc}
-                    sx={fieldInCellSx}
-                  />
-                </TableCell>
-                <TableCell sx={cell}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    minRows={3}
+                    minRows={4}
+                    placeholder="Enter work order line item / description"
                     size="small"
                     value={lineDraft}
                     onChange={(e) => setLineDraft(e.target.value)}
                     onBlur={flushLine}
                     disabled={patchDocument.isPending || !selectedDoc}
-                    sx={fieldInCellSx}
                   />
-                </TableCell>
-                <TableCell sx={cell}>{approvedBoq?.label ?? '—'}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                </Box>
+              </Stack>
+            </Stack>
+          </Paper>
 
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'space-between', maxWidth: 900 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 2,
+              justifyContent: { xs: 'center', sm: 'space-between' },
+              alignItems: 'center',
+            }}
+          >
             <Button
-              variant="contained"
               sx={{
                 ...actionBtnSx,
+                minWidth: 220,
               }}
-              disabled={!selectedDoc || routeRequest.isPending || !approvedBoq}
+              variant="contained"
+              disabled={!selectedDoc || routeRequest.isPending || patchDocument.isPending || !approvedBoq}
               onClick={() => routeRequest.mutate({ requestKind: 'quantity_variation', destination: 'qs' })}
             >
               Quantity Variation
             </Button>
             <Button
+              sx={{ ...actionBtnSx, minWidth: 220 }}
               variant="contained"
-              sx={actionBtnSx}
-              disabled={!selectedDoc || routeRequest.isPending || !approvedBoq}
+              disabled={!selectedDoc || routeRequest.isPending || patchDocument.isPending || !approvedBoq}
               onClick={() => routeRequest.mutate({ requestKind: 'addition_new_item', destination: 'contracts' })}
             >
               Addition of New Item
             </Button>
           </Box>
           {routeRequest.isSuccess && (
-            <Alert severity="success" sx={{ mt: 2, maxWidth: 900 }}>
+            <Alert severity="success" sx={{ mt: 2 }}>
               Request sent.
             </Alert>
           )}
           {routeRequest.isError && (
-            <Alert severity="error" sx={{ mt: 2, maxWidth: 900 }}>
+            <Alert severity="error" sx={{ mt: 2 }}>
               {(routeRequest.error as Error).message}
             </Alert>
           )}
         </>
       )}
+        </Stack>
+      </Paper>
     </Box>
   )
 }

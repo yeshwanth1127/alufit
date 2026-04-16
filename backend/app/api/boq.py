@@ -1,12 +1,16 @@
-import mimetypes
 import uuid
-from io import BytesIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_project_access, role_contracts, role_contracts_qs_read
+from app.core.deps import (
+    get_current_user,
+    require_project_access,
+    role_boq_line_write,
+    role_contracts,
+    role_contracts_qs_read,
+)
 from app.db.session import get_db
 from app.models.entities import BoqLineItem, BoqVersion, BoqVersionStatus, CustomerApprovalStatus, User, utcnow
 from app.schemas.project import BoqLineOut, BoqLinePage, BoqLineUpdatePage, BoqVersionOut
@@ -46,11 +50,6 @@ async def import_xlsx(
         count, errors = import_boq_from_xlsx(db, v, data)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    fname = (file.filename or v.source_filename or "boq.xlsx").strip() or "boq.xlsx"
-    boq_key = make_storage_key(v.project_id, fname)
-    ct = mimetypes.guess_type(fname)[0] or "application/octet-stream"
-    upload_fileobj(BytesIO(data), boq_key, ct)
-    v.source_storage_key = boq_key
     log_transition(
         db,
         project_id=v.project_id,
@@ -103,7 +102,7 @@ def update_lines(
     v = db.get(BoqVersion, version_id)
     if not v:
         raise HTTPException(404)
-    require_project_access(user, db, v.project_id, role_contracts())
+    require_project_access(user, db, v.project_id, role_boq_line_write())
     updated_items: list[BoqLineItem] = []
     for row in body.items:
         item = db.get(BoqLineItem, row.id)

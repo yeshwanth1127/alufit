@@ -1,0 +1,87 @@
+{
+  "name": "Gmail BOQ confirmed → Alufit approval API",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "q": "BOQ confirmed OR quotation confirmed OR confirm boq"
+        }
+      },
+      "id": "e5da5ae3-795a-4bf2-80a1-597b8d57ed5c",
+      "name": "Gmail_Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [880, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "y4g91Ya1MJr7OKKq",
+          "name": "user-10-gmailOAuth2-1768459542045"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.snippet }}",
+              "operation": "contains",
+              "value2": "confirmed"
+            }
+          ]
+        }
+      },
+      "id": "43e54801-417d-4efe-bd96-3608224ddb2d",
+      "name": "Check_Confirmed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 1) Set APPROVAL_URL to your ngrok/public API. 2) WEBHOOK_SECRET must EXACTLY match CUSTOMER_APPROVAL_WEBHOOK_SECRET in backend/.env (restart uvicorn after changing .env).\nconst APPROVAL_URL = 'https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app/api/approval';\nlet WEBHOOK_SECRET = 'REPLACE_WITH_CUSTOMER_APPROVAL_WEBHOOK_SECRET';\ntry {\n  if (typeof $env !== 'undefined' && $env.CUSTOMER_APPROVAL_WEBHOOK_SECRET) {\n    WEBHOOK_SECRET = String($env.CUSTOMER_APPROVAL_WEBHOOK_SECRET).trim();\n  }\n} catch (e) {}\nWEBHOOK_SECRET = String(WEBHOOK_SECRET).trim();\nif (!WEBHOOK_SECRET || WEBHOOK_SECRET.startsWith('REPLACE')) {\n  throw new Error('Set WEBHOOK_SECRET to the same value as CUSTOMER_APPROVAL_WEBHOOK_SECRET in backend/.env (or set n8n env CUSTOMER_APPROVAL_WEBHOOK_SECRET).');\n}\n\nconst UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;\n\nfunction extractBoqVersionId(j) {\n  const subject = String(j.subject || '');\n  const ref = subject.match(/ref:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);\n  if (ref) return ref[1];\n  const text = [subject, j.snippet, j.textPlain, j.text, j.plainText, j.html, j.textHtml, JSON.stringify(j)]\n    .filter(Boolean)\n    .join('\\n');\n  const tagged = text.match(/ALUFIT_BOQ_VERSION_ID=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);\n  if (tagged) return tagged[1];\n  const legacy = text.match(/BOQ version ID:\\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);\n  if (legacy) return legacy[1];\n  const any = text.match(UUID);\n  return any ? any[1] : null;\n}\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  const boq_version_id = extractBoqVersionId(j);\n  if (!boq_version_id) {\n    throw new Error('No BOQ UUID found. Use Alufit emails with \"| ref:<uuid>\" in the subject, or ensure the full message includes ALUFIT_BOQ_VERSION_ID= / BOQ version ID: (Gmail snippet omits most of the body).');\n  }\n  let body;\n  try {\n    body = await this.helpers.httpRequest({\n      method: 'POST',\n      url: APPROVAL_URL,\n      headers: {\n        'X-Webhook-Secret': WEBHOOK_SECRET,\n        'x-webhook-secret': WEBHOOK_SECRET,\n      },\n      body: {\n        boq_version_id,\n        status: 'approved',\n        note: 'Confirmed via Gmail (n8n)',\n      },\n      json: true,\n    });\n  } catch (err) {\n    const detail = err.response?.body ?? err.message ?? String(err);\n    throw new Error(`Alufit API request failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);\n  }\n  out.push({ json: { ...j, boq_version_id, approval_api_response: body } });\n}\nreturn out;"
+      },
+      "id": "a1b2c3d4-1111-2222-3333-444455556666",
+      "name": "POST_Approval_With_BOQ_Id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 220]
+    }
+  ],
+  "connections": {
+    "Gmail_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check_Confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Confirmed": {
+      "main": [
+        [
+          {
+            "node": "POST_Approval_With_BOQ_Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

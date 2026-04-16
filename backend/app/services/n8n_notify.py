@@ -8,8 +8,13 @@ from app.models.entities import BoqVersion, Project
 logger = logging.getLogger(__name__)
 
 
-def notify_n8n_boq_submitted(boq: BoqVersion, project: Project) -> None:
-    """POST to n8n when a BOQ enters customer approval (pending). No-op if URL not configured."""
+def notify_n8n_boq_submitted(
+    boq: BoqVersion,
+    project: Project,
+    *,
+    approval_scope: str = "main_boq",
+) -> None:
+    """POST to n8n when a BOQ enters customer approval (pending) or line additions need approval."""
     settings = get_settings()
     url = settings.n8n_boq_submitted_webhook_url
     if not url:
@@ -20,8 +25,14 @@ def notify_n8n_boq_submitted(boq: BoqVersion, project: Project) -> None:
             "Skipping n8n notify payload: set N8N_BOQ_CALLBACK_URL (or PUBLIC_APP_URL) so the workflow knows where to POST approvals"
         )
         return
+    event = (
+        "boq_line_additions_submitted_for_approval"
+        if approval_scope == "line_additions"
+        else "boq_submitted_for_customer_approval"
+    )
     payload = {
-        "event": "boq_submitted_for_customer_approval",
+        "event": event,
+        "approval_scope": approval_scope,
         "boq_version_id": str(boq.id),
         "project_id": str(project.id),
         "project_name": project.name,

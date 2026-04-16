@@ -171,7 +171,6 @@ class BoqVersion(Base):
     cluster_head: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     client_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source_filename: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    # Storage key for the uploaded BOQ file (local or S3), for email attachment / audit
     source_storage_key: Mapped[Optional[str]] = mapped_column(String(768), nullable=True)
     customer_approval_status: Mapped[CustomerApprovalStatus] = mapped_column(
         Enum(CustomerApprovalStatus),

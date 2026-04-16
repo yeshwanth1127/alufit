@@ -20,6 +20,7 @@ import {
 } from '@mui/material'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { api, apiUpload } from '../api/client'
+import { WORK_ORDER_HEADING_OPTIONS, pickWorkOrderHeading } from '../constants/workOrderHeadings'
 import type { BoqVersion, DesignPackage, DocumentAttachment, Project, ProjectDocument } from '../types'
 
 const serif = `'Georgia', 'Times New Roman', serif`
@@ -184,19 +185,6 @@ export function DesignPage() {
   const [descDraft, setDescDraft] = useState('')
   const [woDraft, setWoDraft] = useState('')
 
-  useEffect(() => {
-    const d = documents?.find((x) => x.id === selectedDocId)
-    if (!d) {
-      setDescDraft('')
-      setWoDraft('')
-      return
-    }
-    setDescDraft(d.title)
-    const stored = (d.work_order_heading || '').trim()
-    const fallback = (approvedBoq?.form_project_name || approvedBoq?.label || '').trim()
-    setWoDraft(stored || fallback)
-  }, [selectedDocId, documents, approvedBoq?.form_project_name, approvedBoq?.label, approvedBoq?.id])
-
   const patchDocument = useMutation({
     mutationFn: async (body: { title?: string; work_order_heading?: string }) => {
       if (!selectedDocId) throw new Error('No document selected')
@@ -210,12 +198,23 @@ export function DesignPage() {
     },
   })
 
-  function effectiveWorkOrder(doc: ProjectDocument | undefined): string {
-    if (!doc) return ''
-    const s = (doc.work_order_heading || '').trim()
-    if (s) return s
-    return (approvedBoq?.form_project_name || approvedBoq?.label || '').trim()
-  }
+  useEffect(() => {
+    const d = documents?.find((x) => x.id === selectedDocId)
+    if (!d) {
+      setDescDraft('')
+      setWoDraft('')
+      return
+    }
+    setDescDraft(d.title)
+    const stored = (d.work_order_heading || '').trim()
+    const fallback = (approvedBoq?.form_project_name || approvedBoq?.label || '').trim()
+    const next = pickWorkOrderHeading(stored, fallback)
+    setWoDraft(next)
+    if (next !== stored) {
+      patchDocument.mutate({ work_order_heading: next })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- patchDocument.mutate is stable
+  }, [selectedDocId, documents, approvedBoq?.form_project_name, approvedBoq?.label, approvedBoq?.id])
 
   function flushDescription() {
     if (!selectedDoc) return
@@ -226,13 +225,6 @@ export function DesignPage() {
     }
     if (next === selectedDoc.title) return
     patchDocument.mutate({ title: next })
-  }
-
-  function flushWorkOrder() {
-    if (!selectedDoc) return
-    const next = woDraft.trim()
-    if (next === effectiveWorkOrder(selectedDoc)) return
-    patchDocument.mutate({ work_order_heading: next })
   }
 
   const fieldInCellSx = {
@@ -367,15 +359,32 @@ export function DesignPage() {
               {selectedDoc ? (
                 <TextField
                   fullWidth
-                  multiline
-                  minRows={2}
+                  select
                   size="small"
                   value={woDraft}
-                  onChange={(e) => setWoDraft(e.target.value)}
-                  onBlur={flushWorkOrder}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setWoDraft(v)
+                    if (v) patchDocument.mutate({ work_order_heading: v })
+                  }}
                   disabled={patchDocument.isPending}
                   sx={fieldInCellSx}
-                />
+                  SelectProps={{
+                    MenuProps: {
+                      PaperProps: { sx: { maxWidth: 560 } },
+                    },
+                  }}
+                >
+                  {WORK_ORDER_HEADING_OPTIONS.map((opt) => (
+                    <MenuItem
+                      key={opt}
+                      value={opt}
+                      sx={{ whiteSpace: 'normal', alignItems: 'flex-start', py: 1 }}
+                    >
+                      {opt}
+                    </MenuItem>
+                  ))}
+                </TextField>
               ) : (
                 '—'
               )}

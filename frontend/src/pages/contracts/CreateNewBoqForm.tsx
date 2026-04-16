@@ -3,31 +3,13 @@ import {
   Alert,
   Box,
   Button,
+  Paper,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { apiUpload } from '../../api/client'
 import type { BoqVersion } from '../../types'
-
-const labelSx = {
-  bgcolor: '#ffeb3b',
-  border: '2px solid #000',
-  fontWeight: 700,
-  px: 1.5,
-  py: 1,
-  minWidth: { xs: '100%', sm: 200 },
-  fontFamily: 'Georgia, "Times New Roman", serif',
-}
-
-const fieldSx = {
-  '& .MuiOutlinedInput-root': {
-    border: '2px solid #000',
-    borderRadius: 0,
-    bgcolor: '#fff',
-    fontFamily: 'Georgia, "Times New Roman", serif',
-  },
-}
 
 type Props = {
   projectId: string
@@ -72,126 +54,93 @@ export function CreateNewBoqForm({ projectId, projectName, onSuccess, onBack }: 
   }
 
   return (
-    <Box sx={{ maxWidth: 720, mx: 'auto', p: 2 }}>
-      <Typography
-        variant="h4"
-        sx={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontWeight: 700,
-          textAlign: 'right',
-          mb: 3,
-          letterSpacing: 0.5,
-        }}
-      >
-        CONTRACTS TEAM
-      </Typography>
-
-      <Button size="small" onClick={onBack} sx={{ mb: 2 }}>
+    <Box sx={{ maxWidth: 520, mx: 'auto', py: { xs: 2, md: 3 }, px: 2 }}>
+      <Button variant="text" color="inherit" onClick={onBack} sx={{ mb: 2, px: 0, minWidth: 0, fontWeight: 600 }}>
         ← Back
       </Button>
 
-      <Typography variant="h6" sx={{ mb: 2, fontFamily: 'Georgia, "Times New Roman", serif' }}>
-        Create new BOQ
-      </Typography>
+      <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 }, borderRadius: 2 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.08em' }}>
+          Contracts
+        </Typography>
+        <Typography variant="h5" sx={{ fontWeight: 650, mb: 0.5 }}>
+          Create new BOQ
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Enter project details and upload your spreadsheet. The file is stored with this BOQ version.
+        </Typography>
 
-      <form onSubmit={submit}>
-        <Stack spacing={0}>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, border: '2px solid #000' }}>
-            <Box sx={labelSx}>Project Name</Box>
+        <form onSubmit={submit} noValidate>
+          <Stack spacing={2.5}>
             <TextField
-              fullWidth
+              label="Project name"
               required
-              variant="outlined"
+              fullWidth
+              size="small"
               value={formProjectName}
               onChange={(e) => setFormProjectName(e.target.value)}
-              sx={{ ...fieldSx, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 0 } }}
+              autoComplete="off"
             />
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, border: '2px solid #000', borderTop: 0 }}>
-            <Box sx={labelSx}>Cluster Head</Box>
             <TextField
-              fullWidth
+              label="Cluster head"
               required
-              variant="outlined"
+              fullWidth
+              size="small"
               value={clusterHead}
               onChange={(e) => setClusterHead(e.target.value)}
-              sx={{ ...fieldSx, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 0 } }}
+              autoComplete="off"
             />
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, border: '2px solid #000', borderTop: 0 }}>
-            <Box sx={labelSx}>Client Name</Box>
             <TextField
-              fullWidth
+              label="Client name"
               required
-              variant="outlined"
+              fullWidth
+              size="small"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              sx={{ ...fieldSx, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 0 } }}
+              autoComplete="off"
             />
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              alignItems: { sm: 'stretch' },
-              border: '2px solid #000',
-              borderTop: 0,
-            }}
-          >
-            <Box sx={labelSx}>Upload BOQ</Box>
-            <Box
-              sx={{
-                flex: 1,
-                borderLeft: { sm: 'none' },
-                p: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                bgcolor: '#fff',
-              }}
-            >
-              <Button variant="outlined" component="label" sx={{ ...fieldSx, alignSelf: 'flex-start' }}>
-                Choose file
-                <input
-                  type="file"
-                  hidden
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                />
-              </Button>
-              <Typography variant="body2" sx={{ mt: 0.5, color: file ? 'text.primary' : 'error.main' }}>
-                {file ? file.name : 'Attachment'}
+
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600 }}>
+                Upload BOQ
               </Typography>
+              <Box
+                sx={{
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 2,
+                  bgcolor: 'grey.50',
+                }}
+              >
+                <Button variant="outlined" color="inherit" component="label" size="small">
+                  Choose file
+                  <input
+                    type="file"
+                    hidden
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </Button>
+                <Typography variant="body2" sx={{ mt: 1, color: file ? 'text.primary' : 'text.secondary' }}>
+                  {file ? file.name : 'No file selected'}
+                </Typography>
+              </Box>
             </Box>
+          </Stack>
+
+          {err && (
+            <Alert severity="error" sx={{ mt: 2.5, borderRadius: 1 }}>
+              {err}
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+            <Button type="submit" variant="contained" color="primary" disabled={loading} size="large">
+              {loading ? 'Submitting…' : 'Submit'}
+            </Button>
           </Box>
-        </Stack>
-
-        {err && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {err}
-          </Alert>
-        )}
-
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-          <Button
-            type="submit"
-            disabled={loading}
-            sx={{
-              bgcolor: '#8ea9db',
-              color: '#000',
-              border: '2px solid #000',
-              borderRadius: 0,
-              px: 4,
-              py: 1.5,
-              fontWeight: 700,
-              textDecoration: 'underline',
-              fontFamily: 'Georgia, "Times New Roman", serif',
-              '&:hover': { bgcolor: '#7b98ca' },
-            }}
-          >
-            {loading ? 'Submitting…' : 'Submit'}
-          </Button>
-        </Box>
-      </form>
+        </form>
+      </Paper>
     </Box>
   )
 }

@@ -3,7 +3,7 @@ import uuid
 from io import BytesIO
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.core.deps import (
 )
 from app.db.session import get_db
 from app.models.entities import (
+    BoqLineItem,
     BoqSource,
     BoqVersion,
     ChangeOrder,
@@ -32,6 +33,7 @@ from app.models.entities import (
 )
 from app.schemas.project import (
     ApprovedBoqProjectGroup,
+    BoqHeadingOut,
     BoqVersionCreate,
     BoqVersionOut,
     MembershipAssign,
@@ -219,6 +221,84 @@ def list_boq_versions(
     )
 
 
+def _looks_like_heading_row(line_no: str, description: str, uom: str | None, quantity: float, rate: float, amount: float) -> bool:
+    """
+    Best-effort heuristic to detect "heading" rows from imported BOQ sheets:
+    - usually have no UOM and all numeric columns are 0
+    - line numbers often are Roman numerals / single letters / short tokens
+    """
+    ln = (line_no or "").strip()
+    desc = (description or "").strip()
+    if not ln or not desc:
+        return False
+    if (uom or "").strip():
+        return False
+    if quantity != 0 or rate != 0 or amount != 0:
+        return False
+    # Roman numerals or single alphabetic tokens (I, II, A, B, etc.)
+    import re
+
+    if re.fullmatch(r"[IVXLCDM]+", ln, flags=re.IGNORECASE):
+        return True
+    if re.fullmatch(r"[A-Z]{1,3}", ln, flags=re.IGNORECASE):
+        return True
+    # Fallback: short token without separators
+    if len(ln) <= 4 and all(ch.isalnum() for ch in ln):
+        return True
+    return False
+
+
+@router.get("/{project_id}/boq-headings", response_model=list[BoqHeadingOut])
+def list_boq_headings(
+    project_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    version_id: Annotated[uuid.UUID | None, Query(description="Optional: extract headings from this BOQ version")] = None,
+) -> list[BoqHeadingOut]:
+    """
+    Returns heading strings from the BOQ sheet to populate dropdowns in Design CO creation.
+    If version_id is omitted, uses latest customer-approved BOQ version for the project.
+    """
+    require_project_access(user, db, project_id, None)
+
+    v: BoqVersion | None
+    if version_id:
+        v = db.get(BoqVersion, version_id)
+        if not v or v.project_id != project_id:
+            raise HTTPException(404, "BOQ version not found")
+    else:
+        v = (
+            db.query(BoqVersion)
+            .filter(
+                BoqVersion.project_id == project_id,
+                BoqVersion.customer_approval_status == CustomerApprovalStatus.approved,
+            )
+            .order_by(BoqVersion.customer_approval_decided_at.desc(), BoqVersion.created_at.desc())
+            .first()
+        )
+        if not v:
+            return []
+
+    lines = (
+        db.query(BoqLineItem)
+        .filter(BoqLineItem.boq_version_id == v.id)
+        .order_by(BoqLineItem.sort_order)
+        .limit(5000)
+        .all()
+    )
+    out: list[BoqHeadingOut] = []
+    seen: set[str] = set()
+    for r in lines:
+        if _looks_like_heading_row(r.line_no, r.description, r.uom, r.quantity, r.rate, r.amount):
+            item = r.description.strip()
+            ref = (r.line_no or "").strip()
+            key = f"{ref.lower()}::{item.lower()}"
+            if key not in seen:
+                out.append(BoqHeadingOut(ref=ref, item=item))
+                seen.add(key)
+    return out
+
+
 @router.get("/{project_id}/contracts/new-item-requests", response_model=list[ChangeOrderOut])
 def list_addition_new_item_requests(
     project_id: uuid.UUID,
@@ -336,11 +416,13 @@ async def create_boq_with_upload(
     except ValueError as e:
         db.rollback()
         raise HTTPException(400, str(e)) from e
-    fname = (v.source_filename or "boq.xlsx").strip() or "boq.xlsx"
-    boq_key = make_storage_key(project_id, fname)
-    ct = mimetypes.guess_type(fname)[0] or "application/octet-stream"
-    upload_fileobj(BytesIO(data), boq_key, ct)
-    v.source_storage_key = boq_key
+
+    fname = v.source_filename or "upload.xlsx"
+    key = make_storage_key(project_id, fname)
+    ct = mimetypes.guess_type(fname)[0]
+    upload_fileobj(BytesIO(data), key, ct)
+    v.source_storage_key = key
+
     _mark_pending_customer_approval(v)
     log_transition(
         db,

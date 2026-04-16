@@ -45,7 +45,16 @@ def process_n8n_customer_boq_approval(
 
     new_status = _STATUS_MAP[body.status]
     v.customer_approval_status = new_status
-    v.customer_approval_note = body.note
+
+    # Normalize automation notes so we don't leak workflow/tool names into the UI.
+    note = (body.note or "").strip()
+    if note:
+        note = note.replace("(n8n)", "").replace("(N8N)", "").strip()
+        note = " ".join(note.split())
+        # If the note is just the automation marker, omit it entirely.
+        if note.lower() == "confirmed via gmail":
+            note = ""
+    v.customer_approval_note = note or None
     from app.models.entities import utcnow
 
     v.customer_approval_decided_at = utcnow()
@@ -58,8 +67,8 @@ def process_n8n_customer_boq_approval(
         from_status="pending_customer_approval",
         to_status=new_status.value,
         actor_id=None,
-        reason="n8n_customer_approval_webhook",
-        metadata={"note": body.note},
+        reason="customer_approval_webhook",
+        metadata={"note": note or None},
     )
     if new_status == CustomerApprovalStatus.approved:
         ensure_design_handoff_document(db, v, actor_id=None)

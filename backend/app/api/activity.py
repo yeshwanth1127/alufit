@@ -21,12 +21,15 @@ def list_activity(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
     entity_type: Annotated[str | None, Query()] = None,
+    before: Annotated[datetime | None, Query(description="Return events created before this timestamp (ISO 8601)")] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 200,
 ) -> list[WorkflowTransition]:
     require_project_access(user, db, project_id, None)
     q = db.query(WorkflowTransition).filter(WorkflowTransition.project_id == project_id)
     if entity_type:
         q = q.filter(WorkflowTransition.entity_type == entity_type)
+    if before:
+        q = q.filter(WorkflowTransition.created_at < before)
     return q.order_by(WorkflowTransition.created_at.desc()).limit(limit).all()
 
 

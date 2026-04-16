@@ -17,9 +17,11 @@ import {
   TableRow,
   TextField,
   Typography,
+  MenuItem,
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { api, apiUpload } from '../api/client'
+import { WORK_ORDER_HEADING_OPTIONS, pickWorkOrderHeading } from '../constants/workOrderHeadings'
 import type { ApprovedBoqProjectGroup, BoqVersion, DocumentAttachment, ProjectDocument } from '../types'
 import { formatIST } from '../utils/time'
 
@@ -226,12 +228,6 @@ function VersionAccordion({
     )
   }, [documents, version.form_project_name, version.label])
 
-  useEffect(() => {
-    if (!linkedDoc?.id) return
-    setDescriptionDraft(linkedDoc.title)
-    setWorkOrderDraft((linkedDoc.work_order_heading || version.form_project_name || version.label || '').trim())
-  }, [linkedDoc?.id, linkedDoc?.title, linkedDoc?.work_order_heading, version.form_project_name, version.label])
-
   const patchDocument = useMutation({
     mutationFn: async (body: { title?: string; work_order_heading?: string }) => {
       if (!linkedDoc?.id) throw new Error('No linked document found')
@@ -246,19 +242,24 @@ function VersionAccordion({
     },
   })
 
+  useEffect(() => {
+    if (!linkedDoc?.id) return
+    setDescriptionDraft(linkedDoc.title)
+    const stored = (linkedDoc.work_order_heading || '').trim()
+    const fallback = (version.form_project_name || version.label || '').trim()
+    const next = pickWorkOrderHeading(stored, fallback)
+    setWorkOrderDraft(next)
+    if (next !== stored) {
+      patchDocument.mutate({ work_order_heading: next })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- patchDocument.mutate is stable
+  }, [linkedDoc?.id, linkedDoc?.title, linkedDoc?.work_order_heading, version.form_project_name, version.label])
+
   function flushDescription() {
     if (!linkedDoc?.id) return
     const next = descriptionDraft.trim()
     if (!next || next === linkedDoc.title) return
     patchDocument.mutate({ title: next })
-  }
-
-  function flushWorkOrder() {
-    if (!linkedDoc?.id) return
-    const next = workOrderDraft.trim()
-    const current = (linkedDoc.work_order_heading || '').trim() || (version.form_project_name || version.label || '').trim()
-    if (!next || next === current) return
-    patchDocument.mutate({ work_order_heading: next })
   }
 
   const uploadAttachment = useMutation({
@@ -292,11 +293,24 @@ function VersionAccordion({
   return (
     <Accordion expanded={expanded} onChange={(_, ex) => onExpandedChange(ex)}>
       <AccordionSummary expandIcon={<span>▾</span>}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', width: '100%' }}>
-          <Typography sx={{ fontWeight: 700 }}>{version.label}</Typography>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={{ xs: 0.25, sm: 1 }}
+          sx={{ alignItems: { sm: 'center' }, width: '100%' }}
+        >
+          <Typography sx={{ fontWeight: 700, lineHeight: 1.2 }}>{version.label}</Typography>
           <Typography variant="caption" color="text.secondary">
             Approved at {formatIST(version.customer_approval_decided_at || version.created_at)}
           </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            <Typography variant="caption" color="text.secondary">
+              Client: <strong>{(version.client_name || '—').trim() || '—'}</strong>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Cluster head: <strong>{(version.cluster_head || '—').trim() || '—'}</strong>
+            </Typography>
+          </Stack>
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
@@ -325,12 +339,31 @@ function VersionAccordion({
               <TableCell sx={cell}>
                 <TextField
                   fullWidth
+                  select
                   size="small"
                   value={workOrderDraft}
-                  onChange={(e) => setWorkOrderDraft(e.target.value)}
-                  onBlur={flushWorkOrder}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setWorkOrderDraft(v)
+                    if (linkedDoc?.id && v) patchDocument.mutate({ work_order_heading: v })
+                  }}
                   disabled={!linkedDoc?.id || patchDocument.isPending}
-                />
+                  SelectProps={{
+                    MenuProps: {
+                      PaperProps: { sx: { maxWidth: 560 } },
+                    },
+                  }}
+                >
+                  {WORK_ORDER_HEADING_OPTIONS.map((opt) => (
+                    <MenuItem
+                      key={opt}
+                      value={opt}
+                      sx={{ whiteSpace: 'normal', alignItems: 'flex-start', py: 1 }}
+                    >
+                      {opt}
+                    </MenuItem>
+                  ))}
+                </TextField>
               </TableCell>
               <TableCell sx={cell}>{version.label}</TableCell>
             </TableRow>

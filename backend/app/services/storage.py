@@ -72,6 +72,20 @@ def upload_fileobj(fileobj: BinaryIO, key: str, content_type: str | None) -> Non
     )
 
 
+def read_storage_bytes(key: str) -> bytes:
+    """Read the full object contents from the configured storage backend."""
+    s = get_settings()
+    if s.storage_backend == "local":
+        path = _safe_local_file(key)
+        with open(path, "rb") as f:
+            return f.read()
+    obj = _client().get_object(Bucket=s.s3_bucket, Key=key)
+    body = obj.get("Body")
+    if body is None:
+        return b""
+    return body.read()
+
+
 def presigned_get_url(key: str, expires: int = 3600) -> str:
     s = get_settings()
     if s.storage_backend == "local":
@@ -86,14 +100,3 @@ def presigned_get_url(key: str, expires: int = 3600) -> str:
 def make_storage_key(project_id: uuid.UUID, filename: str) -> str:
     safe = filename.replace("/", "_")[:200]
     return f"projects/{project_id}/{uuid.uuid4().hex}_{safe}"
-
-
-def read_storage_bytes(key: str) -> bytes:
-    """Read object bytes for a storage key (local disk or S3)."""
-    s = get_settings()
-    if s.storage_backend == "local":
-        path = resolve_local_storage_key(key)
-        return path.read_bytes()
-    ensure_bucket()
-    obj = _client().get_object(Bucket=s.s3_bucket, Key=key)
-    return obj["Body"].read()

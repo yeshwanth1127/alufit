@@ -29,6 +29,10 @@ export type BoqVersion = {
   customer_approval_note?: string | null
   customer_submitted_for_approval_at?: string | null
   customer_approval_decided_at?: string | null
+  addition_approval_status: CustomerApprovalStatus
+  addition_approval_note?: string | null
+  addition_submitted_for_approval_at?: string | null
+  addition_approval_decided_at?: string | null
   created_at: string
   locked_at: string | null
 }
@@ -95,6 +99,7 @@ export type QsRun = {
   status: string
   mail_confirmed: boolean
   work_order_received: boolean
+  created_at: string
 }
 
 export type QsVariance = {
@@ -139,4 +144,16 @@ export type Me = {
 export type ApprovedBoqProjectGroup = {
   project: Project
   versions: BoqVersion[]
+}
+
+export type WorkflowTransition = {
+  id: string
+  entity_type: string
+  entity_id: string
+  from_status: string | null
+  to_status: string
+  actor_id: string | null
+  reason: string | null
+  metadata_json: Record<string, unknown> | null
+  created_at: string
 }

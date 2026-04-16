@@ -93,6 +93,11 @@ class BoqLinePage(BaseModel):
     total_count: int
 
 
+class BoqHeadingOut(BaseModel):
+    ref: str
+    item: str
+
+
 class ApprovedBoqProjectGroup(BaseModel):
     project: ProjectOut
     versions: list[BoqVersionOut]

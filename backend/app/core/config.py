@@ -2,7 +2,6 @@ from functools import lru_cache
 from typing import Literal
 import json
 
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,18 +37,17 @@ class Settings(BaseSettings):
     # Shared secret: n8n must send this in header X-Webhook-Secret when POSTing approval results
     customer_approval_webhook_secret: str = "dev-n8n-secret-change-in-production"
 
-    # Outbound email when a BOQ is submitted for approval (contracts: new upload / submit for approval)
+    # Outbound BOQ notification emails (optional; empty skips or uses fallbacks in boq_submit_email)
+    boq_submit_notify_email: str | None = None
+    boq_line_additions_notify_email: str | None = None
+
+    # Outbound email (SMTP_* required to send)
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_use_tls: bool = True
-    smtp_user: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("SMTP_USER", "SMTP_USERNAME"),
-    )
+    smtp_user: str | None = None
     smtp_password: str | None = None
-    # Display/sender address (e.g. support@your-domain.com); falls back to SMTP_USER if unset
     smtp_from_email: str | None = None
-    boq_submit_notify_email: str = "yeshwanthsh128@gmail.com"
 
     # RBAC: Email domain to role mapping (JSON format)
     # Example: '{"contracts.com": "contracts", "design.co.uk": "design", "qs.com": "qs"}'

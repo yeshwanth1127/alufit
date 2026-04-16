@@ -105,4 +105,10 @@ def role_design() -> set[DepartmentRole]:
 
 
 def role_contracts_qs_read() -> set[DepartmentRole]:
-    return {DepartmentRole.contracts, DepartmentRole.qs, DepartmentRole.admin}
+    """Read BOQ version and line items."""
+    return {DepartmentRole.contracts, DepartmentRole.qs, DepartmentRole.design, DepartmentRole.admin}
+
+
+def role_boq_line_write() -> set[DepartmentRole]:
+    """Save BOQ line edits (spreadsheet editor): contracts, QS, design, admin."""
+    return {DepartmentRole.contracts, DepartmentRole.qs, DepartmentRole.design, DepartmentRole.admin}
